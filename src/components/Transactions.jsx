@@ -6,840 +6,604 @@ import { formatCurrency, formatCompactNumber } from '../utils/format';
 import TransactionModal from './TransactionModal';
 import ConfirmModal from './ConfirmModal';
 import {
-    LineChart,
-    Line,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+import {
+  Icon, Card, Pill, IconTile, Eyebrow, hueForCategory, hueColorVar
+} from './ds/Primitives';
 
-// Color palette for currencies
+// Currency chart colors — warm palette
 const CURRENCY_COLORS = {
-    'COP': '#10b981', // emerald-500
-    'USD': '#3b82f6', // blue-500
-    'EUR': '#f59e0b', // amber-500
-    'DEFAULT': '#8b5cf6' // violet-500
+  COP: '#C9582A',   // clay-500
+  USD: '#5E6738',   // olive-500
+  EUR: '#DCA63B',   // amber-300
+  DEFAULT: '#8A4848', // plum-400
+};
+
+// Small filter field wrapper
+const FilterField = ({ label, children }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 150, flex: 1, maxWidth: 220 }}>
+    <Eyebrow style={{ marginBottom: 5 }}>{label}</Eyebrow>
+    {children}
+  </div>
+);
+
+const filterInputStyle = {
+  background: 'var(--bg-default)',
+  border: '1px solid var(--border-default)',
+  borderRadius: 10, padding: '8px 10px',
+  fontSize: 13, color: 'var(--fg-1)', fontFamily: 'var(--font-sans)',
+  outline: 'none', width: '100%', boxSizing: 'border-box',
 };
 
 export default function Transactions({ currentContext }) {
-    const { getTotals, deleteTransaction, appConfig } = useFinance();
-    const { filteredTransactions } = useMemo(() => getTotals(currentContext), [getTotals, currentContext]);
+  const { getTotals, deleteTransaction } = useFinance();
+  const { filteredTransactions } = useMemo(() => getTotals(currentContext), [getTotals, currentContext]);
 
-    // Modal state
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingTransaction, setEditingTransaction] = useState(null);
-    const [confirmDelete, setConfirmDelete] = useState({ isOpen: false, txId: null });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState({ isOpen: false, txId: null });
 
-    // Filters
-    const [startDate, setStartDate] = useState(() => format(startOfYear(new Date()), 'yyyy-MM-dd'));
-    const [endDate, setEndDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  // Filters
+  const [startDate, setStartDate] = useState(() => format(startOfYear(new Date()), 'yyyy-MM-dd'));
+  const [endDate, setEndDate]     = useState(() => format(new Date(), 'yyyy-MM-dd'));
+  const [categoryFilter, setCategoryFilter]     = useState('');
+  const [subcategoryFilter, setSubcategoryFilter] = useState('');
+  const [accountFilter, setAccountFilter]         = useState('');
+  const [minAmountFilter, setMinAmountFilter]     = useState('');
+  const [maxAmountFilter, setMaxAmountFilter]     = useState('');
+  const [typeFilter, setTypeFilter]               = useState('');
+  const [searchText, setSearchText]               = useState('');
+  const [noSubcategoryOnly, setNoSubcategoryOnly] = useState(false);
+  const [pageSize, setPageSize]     = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedCurrency, setSelectedCurrency] = useState(null);
 
-    // New Filters
-    const [categoryFilter, setCategoryFilter] = useState('');
-    const [subcategoryFilter, setSubcategoryFilter] = useState('');
-    const [accountFilter, setAccountFilter] = useState('');
-    const [minAmountFilter, setMinAmountFilter] = useState('');
-    const [maxAmountFilter, setMaxAmountFilter] = useState('');
-    const [typeFilter, setTypeFilter] = useState('');
-    const [searchText, setSearchText] = useState('');
-    const [noSubcategoryOnly, setNoSubcategoryOnly] = useState(false);
+  const uniqueCategories = useMemo(() => Array.from(new Set(filteredTransactions.map(t => t.category || 'General'))).sort(), [filteredTransactions]);
+  const uniqueSubcategories = useMemo(() => {
+    const rel = categoryFilter ? filteredTransactions.filter(t => (t.category || 'General') === categoryFilter) : filteredTransactions;
+    return Array.from(new Set(rel.filter(t => t.subcategory).map(t => t.subcategory))).sort();
+  }, [filteredTransactions, categoryFilter]);
+  const uniqueAccounts = useMemo(() => {
+    const s = new Set();
+    filteredTransactions.forEach(t => {
+      s.add(t.card || t.account || 'Efectivo');
+      if (t.destinationCard) s.add(t.destinationCard);
+    });
+    return Array.from(s).sort();
+  }, [filteredTransactions]);
 
-    // Pagination
-    const [pageSize, setPageSize] = useState(10);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [selectedCurrency, setSelectedCurrency] = useState(null);
+  const processedTransactions = useMemo(() => {
+    let list = filteredTransactions;
+    const start = startOfDay(new Date(startDate + 'T00:00:00'));
+    const end   = endOfDay(new Date(endDate   + 'T23:59:59'));
+    list = list.filter(t => isWithinInterval(t.date, { start, end }));
+    if (categoryFilter)    list = list.filter(t => (t.category || 'General') === categoryFilter);
+    if (subcategoryFilter) list = list.filter(t => t.subcategory === subcategoryFilter);
+    if (accountFilter) {
+      list = list.filter(t => {
+        const card = t.card || t.account || 'Efectivo';
+        return t.type === 'transfer' || t.isTransfer ? card === accountFilter || t.destinationCard === accountFilter : card === accountFilter;
+      });
+    }
+    if (minAmountFilter !== '') list = list.filter(t => t.amount >= Number(minAmountFilter));
+    if (maxAmountFilter !== '') list = list.filter(t => t.amount <= Number(maxAmountFilter));
+    if (typeFilter) {
+      if (typeFilter === 'transfer') list = list.filter(t => t.type === 'transfer' || t.isTransfer);
+      else list = list.filter(t => t.type === typeFilter && !t.isTransfer);
+    }
+    if (searchText.trim()) {
+      const q = searchText.trim().toLowerCase();
+      list = list.filter(t => (t.title || t.description || '').toLowerCase().includes(q) || (t.comments || '').toLowerCase().includes(q));
+    }
+    if (noSubcategoryOnly) list = list.filter(t => !t.subcategory);
+    list.sort((a, b) => b.date.getTime() - a.date.getTime());
+    return list;
+  }, [filteredTransactions, startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly]);
 
-    // Extract unique options for selects
-    const uniqueCategories = useMemo(() => {
-        const cats = new Set(filteredTransactions.map(t => t.category || 'General'));
-        return Array.from(cats).sort();
-    }, [filteredTransactions]);
+  React.useEffect(() => { setCurrentPage(1); }, [startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pageSize]);
 
-    const uniqueSubcategories = useMemo(() => {
-        // Only show subcategories related to selected category if one is selected
-        const relevantTxs = categoryFilter ? filteredTransactions.filter(t => (t.category || 'General') === categoryFilter) : filteredTransactions;
-        const subCats = new Set(relevantTxs.filter(t => t.subcategory).map(t => t.subcategory));
-        return Array.from(subCats).sort();
-    }, [filteredTransactions, categoryFilter]);
+  const paginatedTransactions = useMemo(() => processedTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize), [processedTransactions, currentPage, pageSize]);
+  const totalPages = Math.ceil(processedTransactions.length / pageSize) || 1;
 
-    const uniqueAccounts = useMemo(() => {
-        const accounts = new Set();
-        filteredTransactions.forEach(t => {
-            accounts.add(t.card || t.account || 'Efectivo');
-            if (t.destinationCard) accounts.add(t.destinationCard);
-        });
-        return Array.from(accounts).sort();
-    }, [filteredTransactions]);
+  const chartData = useMemo(() => {
+    const asc = [...processedTransactions].reverse();
+    const activeCurrencies = new Set();
+    asc.forEach(t => activeCurrencies.add(t.currency || 'USD'));
+    let running = {};
+    activeCurrencies.forEach(c => { running[c] = 0; });
+    const dataPoints = asc.map(t => {
+      const amt = t.type === 'credit' ? Number(t.amount) : -Number(t.amount);
+      const cur = t.currency || 'USD';
+      running[cur] += amt;
+      return { date: format(t.date, 'dd MMM', { locale: es }), timestamp: t.date.getTime(), ...running };
+    });
+    return { dataPoints, currencies: Array.from(activeCurrencies) };
+  }, [processedTransactions]);
 
-    // Apply filters
-    const processedTransactions = useMemo(() => {
-        let filtered = filteredTransactions;
+  React.useEffect(() => {
+    const { currencies } = chartData;
+    if (currencies.length > 0 && (!selectedCurrency || !currencies.includes(selectedCurrency))) setSelectedCurrency(currencies[0]);
+  }, [chartData, selectedCurrency]);
 
-        // Date filter
-        const start = startOfDay(new Date(startDate + 'T00:00:00'));
-        const end = endOfDay(new Date(endDate + 'T23:59:59'));
-
-        filtered = filtered.filter(t => {
-            const txDate = t.date;
-            return isWithinInterval(txDate, { start, end });
-        });
-
-        // Category filter
-        if (categoryFilter) {
-            filtered = filtered.filter(t => (t.category || 'General') === categoryFilter);
+  const searchSummary = useMemo(() => {
+    const activeCurrency = selectedCurrency || (chartData.currencies[0] || 'COP');
+    const rel = processedTransactions.filter(t => (t.currency || 'USD') === activeCurrency);
+    let totalIngresos = 0, totalEgresos = 0, totalTransferencias = 0;
+    const categorias = {}, subcategorias = {}, cuentas = {};
+    rel.forEach(t => {
+      const amt = Number(t.amount || 0);
+      if (t.type === 'transfer' || t.isTransfer) {
+        totalTransferencias += amt;
+      } else if (t.type === 'credit') {
+        totalIngresos += amt;
+        const acc = t.card || t.account || 'Efectivo';
+        cuentas[acc] = (cuentas[acc] || 0) + amt;
+      } else {
+        totalEgresos += amt;
+        const acc = t.card || t.account || 'Efectivo';
+        cuentas[acc] = (cuentas[acc] || 0) - amt;
+        const cat = t.category || 'General';
+        categorias[cat] = (categorias[cat] || 0) + amt;
+        if (t.subcategory) {
+          const key = `${cat} - ${t.subcategory}`;
+          subcategorias[key] = (subcategorias[key] || 0) + amt;
         }
-
-        // Subcategory filter
-        if (subcategoryFilter) {
-            filtered = filtered.filter(t => t.subcategory === subcategoryFilter);
-        }
-
-        // Account filter
-        if (accountFilter) {
-            filtered = filtered.filter(t => {
-                const card = t.card || t.account || 'Efectivo';
-                if (t.type === 'transfer' || t.isTransfer) {
-                    return card === accountFilter || t.destinationCard === accountFilter;
-                }
-                return card === accountFilter;
-            });
-        }
-
-        // Amount filters
-        if (minAmountFilter !== '') {
-            filtered = filtered.filter(t => t.amount >= Number(minAmountFilter));
-        }
-        if (maxAmountFilter !== '') {
-            filtered = filtered.filter(t => t.amount <= Number(maxAmountFilter));
-        }
-
-        // Type filter
-        if (typeFilter) {
-            if (typeFilter === 'transfer') {
-                filtered = filtered.filter(t => t.type === 'transfer' || t.isTransfer);
-            } else {
-                filtered = filtered.filter(t => t.type === typeFilter && !t.isTransfer);
-            }
-        }
-
-        // Text search
-        if (searchText.trim()) {
-            const query = searchText.trim().toLowerCase();
-            filtered = filtered.filter(t => {
-                const title = (t.title || t.description || '').toLowerCase();
-                const comments = (t.comments || '').toLowerCase();
-                return title.includes(query) || comments.includes(query);
-            });
-        }
-
-        // No subcategory filter
-        if (noSubcategoryOnly) {
-            filtered = filtered.filter(t => !t.subcategory);
-        }
-
-        // Ensure sorted by date desc
-        filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-        return filtered;
-    }, [filteredTransactions, startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly]);
-
-    // Reset pagination when filters change
-    React.useEffect(() => {
-        setCurrentPage(1);
-    }, [startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pageSize]);
-
-    // Pagination slice
-    const paginatedTransactions = useMemo(() => {
-        const startIndex = (currentPage - 1) * pageSize;
-        return processedTransactions.slice(startIndex, startIndex + pageSize);
-    }, [processedTransactions, currentPage, pageSize]);
-
-    const totalPages = Math.ceil(processedTransactions.length / pageSize) || 1;
-
-    // Chart Data Preparation: Cumulative Balance by currency over time in this range
-    const chartData = useMemo(() => {
-        // Transactions are descending right now. We need ascending for charts
-        const ascTransactions = [...processedTransactions].reverse();
-
-        // Find which currencies are active in this period
-        const activeCurrencies = new Set();
-        ascTransactions.forEach(t => activeCurrencies.add(t.currency || 'USD'));
-
-        // Compile balances over time
-        let runningBalances = {};
-        activeCurrencies.forEach(c => runningBalances[c] = 0);
-
-        const dataPoints = [];
-
-        ascTransactions.forEach(t => {
-            const amount = t.type === 'credit' ? Number(t.amount) : -Number(t.amount);
-            const currency = t.currency || 'USD';
-
-            runningBalances[currency] += amount;
-
-            const dateStr = format(t.date, 'dd MMM', { locale: es });
-
-            // Check if we need to merge with the previous data point (if same day)
-            // For a perfectly exact chart we might want one point per day, but one point per tx is fine too
-            dataPoints.push({
-                date: dateStr,
-                timestamp: t.date.getTime(),
-                ...runningBalances
-            });
-        });
-
-        // If no transactions, provide empty points to not break chart
-        return { dataPoints, currencies: Array.from(activeCurrencies) };
-    }, [processedTransactions]);
-
-    // Search Summary Calculation
-    const searchSummary = useMemo(() => {
-        const activeCurrency = selectedCurrency || (chartData.currencies.length > 0 ? chartData.currencies[0] : 'USD');
-
-        let totalIngresos = 0;
-        let totalEgresos = 0;
-        let totalTransferencias = 0;
-
-        const categorias = {};
-        const subcategorias = {};
-        const cuentas = {};
-
-        // Only process transactions that match the active currency to keep totals consistent
-        const relevantTxs = processedTransactions.filter(t => (t.currency || 'USD') === activeCurrency);
-
-        relevantTxs.forEach(t => {
-            const amount = Number(t.amount || 0);
-
-            // Totals by type & Account Net Flows
-            if (t.type === 'transfer' || t.isTransfer) {
-                totalTransferencias += amount;
-            } else if (t.type === 'credit') {
-                totalIngresos += amount;
-                const account = t.card || t.account || 'Efectivo';
-                cuentas[account] = (cuentas[account] || 0) + amount;
-            } else {
-                totalEgresos += amount;
-                const account = t.card || t.account || 'Efectivo';
-                cuentas[account] = (cuentas[account] || 0) - amount;
-
-                // Categories and Subcategories (only tracking expenses for these usually makes sense, but we can track all or just debits. Let's track debits for categorizations of expenses)
-                const category = t.category || 'General';
-                categorias[category] = (categorias[category] || 0) + amount;
-
-                if (t.subcategory) {
-                    const key = `${category} - ${t.subcategory}`;
-                    subcategorias[key] = (subcategorias[key] || 0) + amount;
-                }
-            }
-        });
-
-        const sortedCategories = Object.entries(categorias)
-            .sort(([, a], [, b]) => b - a)
-            .map(([name, amount]) => ({ name, amount }));
-
-        const sortedSubcategories = Object.entries(subcategorias)
-            .sort(([, a], [, b]) => b - a)
-            .map(([name, amount]) => ({ name, amount }));
-
-        const sortedAccounts = Object.entries(cuentas)
-            .sort(([, a], [, b]) => b - a) // Sort by highest net flow first
-            .map(([name, amount]) => ({ name, amount }));
-
-        return {
-            currency: activeCurrency,
-            totalIngresos,
-            totalEgresos,
-            totalTransferencias,
-            categories: sortedCategories,
-            subcategories: sortedSubcategories,
-            accounts: sortedAccounts,
-            hasData: relevantTxs.length > 0
-        };
-    }, [processedTransactions, selectedCurrency, chartData.currencies]);
-
-
-    // Auto-select first currency when available currencies change
-    React.useEffect(() => {
-        const { currencies } = chartData;
-        if (currencies.length > 0 && (!selectedCurrency || !currencies.includes(selectedCurrency))) {
-            setSelectedCurrency(currencies[0]);
-        }
-    }, [chartData, selectedCurrency]);
-
-    const renderChart = () => {
-        const { dataPoints, currencies } = chartData;
-
-        if (currencies.length === 0) {
-            return (
-                <div className="h-64 flex items-center justify-center text-slate-400 bg-white/40 rounded-2xl border border-white/40 shadow-sm">
-                    No hay datos para el rango seleccionado.
-                </div>
-            );
-        }
-
-        const activeCurrency = selectedCurrency || currencies[0];
-        const color = CURRENCY_COLORS[activeCurrency] || CURRENCY_COLORS.DEFAULT;
-
-        return (
-            <div className="w-full bg-white/40 rounded-2xl border border-white/40 shadow-sm p-4 backdrop-blur-md flex flex-col gap-3">
-                {/* Currency toggle pills */}
-                {currencies.length > 1 && (
-                    <div className="flex items-center gap-2">
-                        {currencies.map(currency => {
-                            const isActive = currency === activeCurrency;
-                            const pillColor = CURRENCY_COLORS[currency] || CURRENCY_COLORS.DEFAULT;
-                            return (
-                                <button
-                                    key={currency}
-                                    onClick={() => setSelectedCurrency(currency)}
-                                    className="px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-200"
-                                    style={{
-                                        backgroundColor: isActive ? pillColor : 'transparent',
-                                        color: isActive ? '#fff' : pillColor,
-                                        border: `2px solid ${pillColor}`,
-                                        opacity: isActive ? 1 : 0.6,
-                                    }}
-                                >
-                                    {currency}
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-
-                <div className="h-72 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={dataPoints} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                            <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                            <YAxis
-                                stroke={color}
-                                fontSize={12}
-                                axisLine={false}
-                                tickLine={false}
-                                tickFormatter={(val) => formatCompactNumber(val)}
-                            />
-                            <Tooltip
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
-                                formatter={(value) => {
-                                    try {
-                                        return [formatCurrency(value, activeCurrency), `Balance ${activeCurrency}`];
-                                    } catch {
-                                        return [`$${value}`, `Balance ${activeCurrency}`];
-                                    }
-                                }}
-                                labelStyle={{ color: '#475569', fontWeight: '500', marginBottom: '8px' }}
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey={activeCurrency}
-                                name={`Balance ${activeCurrency}`}
-                                stroke={color}
-                                strokeWidth={3}
-                                dot={false}
-                                activeDot={{ r: 6, strokeWidth: 0 }}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-        );
+      }
+    });
+    return {
+      currency: activeCurrency,
+      totalIngresos, totalEgresos, totalTransferencias,
+      categories: Object.entries(categorias).sort(([, a], [, b]) => b - a).map(([name, amount]) => ({ name, amount })),
+      subcategories: Object.entries(subcategorias).sort(([, a], [, b]) => b - a).map(([name, amount]) => ({ name, amount })),
+      accounts: Object.entries(cuentas).sort(([, a], [, b]) => b - a).map(([name, amount]) => ({ name, amount })),
+      hasData: rel.length > 0,
     };
+  }, [processedTransactions, selectedCurrency, chartData]);
 
-    return (
-        <div className="flex-1 flex flex-col p-4 md:p-8 overflow-y-auto w-full relative">
-            <div className="max-w-[1600px] mx-auto w-full flex flex-col gap-8 pb-12">
-                {/* Header & Controls */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-br from-slate-900 via-primary to-secondary bg-clip-text text-transparent">
-                            Historial de Transacciones
-                        </h1>
-                        <p className="text-slate-500 mt-2">
-                            Analiza y filtra todos tus movimientos
-                        </p>
-                    </div>
+  const clearFilters = () => {
+    setStartDate(format(startOfYear(new Date()), 'yyyy-MM-dd'));
+    setEndDate(format(new Date(), 'yyyy-MM-dd'));
+    setCategoryFilter(''); setSubcategoryFilter(''); setAccountFilter('');
+    setMinAmountFilter(''); setMaxAmountFilter(''); setTypeFilter('');
+    setSearchText(''); setNoSubcategoryOnly(false);
+  };
 
-                    {/* Advanced Filters */}
-                    <div className="bg-white/60 p-4 rounded-2xl border border-white/50 backdrop-blur-md shadow-sm">
-                        <div className="flex flex-wrap items-end gap-3">
-                            {/* Search */}
-                            <div className="flex flex-col min-w-[180px] flex-1 max-w-[240px]">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1">Buscar</label>
-                                <div className="relative">
-                                    <span className="material-symbols-outlined text-slate-400 text-sm absolute left-2.5 top-1/2 -translate-y-1/2">search</span>
-                                    <input
-                                        type="text"
-                                        placeholder="Título o comentario..."
-                                        value={searchText}
-                                        onChange={(e) => setSearchText(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 pl-8 text-slate-700 outline-none"
-                                    />
-                                </div>
-                            </div>
+  const txIcon = (tx) => {
+    if (tx.type === 'transfer' || tx.isTransfer) return 'swap_horiz';
+    if (tx.type === 'credit') return 'trending_up';
+    const map = { food: 'restaurant', software: 'code', services: 'home_repair_service', salud: 'medical_services', transporte: 'directions_car' };
+    return map[tx.category] || 'payments';
+  };
 
-                            {/* Dates */}
-                            <div className="flex flex-col">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1">Fechas</label>
-                                <div className="flex items-center gap-1.5">
-                                    <input
-                                        type="date"
-                                        title="Desde"
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        className="bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 text-slate-700 outline-none cursor-pointer"
-                                    />
-                                    <span className="text-slate-400 font-medium">-</span>
-                                    <input
-                                        type="date"
-                                        title="Hasta"
-                                        value={endDate}
-                                        onChange={(e) => setEndDate(e.target.value)}
-                                        className="bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 text-slate-700 outline-none cursor-pointer"
-                                    />
-                                </div>
-                            </div>
+  return (
+    <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto', padding: '0 20px', paddingBottom: 32 }} className="animate-fade-up">
 
-                            {/* Type */}
-                            <div className="flex flex-col min-w-[180px] flex-1 max-w-[240px]">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1">Tipo</label>
-                                <select
-                                    className="custom-select bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 text-slate-700 outline-none"
-                                    value={typeFilter}
-                                    onChange={(e) => setTypeFilter(e.target.value)}
-                                >
-                                    <option value="">Todos</option>
-                                    <option value="credit">Ingreso</option>
-                                    <option value="debit">Egreso</option>
-                                    <option value="transfer">Transferencia</option>
-                                </select>
-                            </div>
+      {/* Page header */}
+      <div style={{ padding: '16px 0 16px' }}>
+        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em' }}>Movimientos</h1>
+        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--fg-3)' }}>Todo lo que entra y sale, en orden cronológico.</p>
+      </div>
 
-                            {/* Category */}
-                            <div className="flex flex-col min-w-[180px] flex-1 max-w-[240px]">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1">Categoría</label>
-                                <select
-                                    className="custom-select bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 text-slate-700 outline-none"
-                                    value={categoryFilter}
-                                    onChange={(e) => {
-                                        setCategoryFilter(e.target.value);
-                                        setSubcategoryFilter('');
-                                    }}
-                                >
-                                    <option value="">Todas</option>
-                                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                            </div>
-
-                            {/* Subcategory */}
-                            <div className="flex flex-col min-w-[180px] flex-1 max-w-[240px]">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1">Subcategoría</label>
-                                <select
-                                    className="custom-select bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 text-slate-700 outline-none"
-                                    value={subcategoryFilter}
-                                    onChange={(e) => setSubcategoryFilter(e.target.value)}
-                                >
-                                    <option value="">Todas</option>
-                                    {uniqueSubcategories.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                            </div>
-
-                            {/* Account */}
-                            <div className="flex flex-col min-w-[180px] flex-1 max-w-[240px]">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1">Cuenta</label>
-                                <select
-                                    className="custom-select bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 text-slate-700 outline-none"
-                                    value={accountFilter}
-                                    onChange={(e) => setAccountFilter(e.target.value)}
-                                >
-                                    <option value="">Todas</option>
-                                    {uniqueAccounts.map(a => <option key={a} value={a}>{a}</option>)}
-                                </select>
-                            </div>
-
-                            {/* Min Amount */}
-                            <div className="flex flex-col min-w-[180px] flex-1 max-w-[240px]">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1">Monto Mín.</label>
-                                <input
-                                    type="number"
-                                    placeholder="0"
-                                    value={minAmountFilter}
-                                    onChange={(e) => setMinAmountFilter(e.target.value)}
-                                    className="bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 text-slate-700 outline-none w-full"
-                                />
-                            </div>
-
-                            {/* Max Amount */}
-                            <div className="flex flex-col min-w-[180px] flex-1 max-w-[240px]">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase mb-1">Monto Máx.</label>
-                                <input
-                                    type="number"
-                                    placeholder="∞"
-                                    value={maxAmountFilter}
-                                    onChange={(e) => setMaxAmountFilter(e.target.value)}
-                                    className="bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium focus:ring-1 focus:ring-primary p-2 text-slate-700 outline-none w-full"
-                                />
-                            </div>
-
-                            {/* No subcategory checkbox */}
-                            <div className="flex items-end">
-                                <button
-                                    onClick={() => setNoSubcategoryOnly(v => !v)}
-                                    className={`px-3 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-1.5 h-[38px] border ${noSubcategoryOnly
-                                        ? 'bg-amber-50 border-amber-300 text-amber-700'
-                                        : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200 hover:text-slate-800'
-                                        }`}
-                                    title="Mostrar solo transacciones sin subcategoría"
-                                >
-                                    <span className="material-symbols-outlined text-sm">{noSubcategoryOnly ? 'check_box' : 'check_box_outline_blank'}</span>
-                                    <span className="hidden sm:inline text-xs">Sin subcat.</span>
-                                </button>
-                            </div>
-
-                            {/* Clear Filters Button */}
-                            <div className="flex items-center pb-0.5">
-                                <button
-                                    onClick={() => {
-                                        setStartDate(format(startOfYear(new Date()), 'yyyy-MM-dd'));
-                                        setEndDate(format(new Date(), 'yyyy-MM-dd'));
-                                        setCategoryFilter('');
-                                        setSubcategoryFilter('');
-                                        setAccountFilter('');
-                                        setMinAmountFilter('');
-                                        setMaxAmountFilter('');
-                                        setTypeFilter('');
-                                        setSearchText('');
-                                        setNoSubcategoryOnly(false);
-                                    }}
-                                    className="px-4 py-2 text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-800 rounded-lg transition-colors flex items-center gap-1 h-[38px]"
-                                    title="Limpiar todos los filtros"
-                                >
-                                    <span className="material-symbols-outlined text-sm">filter_list_off</span>
-                                    <span className="hidden sm:inline">Limpiar</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Chart Section */}
-                <div className="flex flex-col gap-2">
-                    <h2 className="text-lg font-bold text-slate-800">Evolución de Balances</h2>
-                    {renderChart()}
-                </div>
-
-                {/* List Section */}
-                <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-white/50 shadow-sm flex flex-col overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <h2 className="text-lg font-bold text-slate-800">
-                            Resultados ({processedTransactions.length})
-                        </h2>
-
-                        {/* Stepper / Page Size control */}
-                        <div className="flex items-center gap-2 bg-slate-100/80 p-1 rounded-xl">
-                            {[10, 20, 50].map(size => (
-                                <button
-                                    key={size}
-                                    onClick={() => { setPageSize(size); setCurrentPage(1); }}
-                                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-300 ${pageSize === size
-                                        ? 'bg-white text-primary shadow-sm'
-                                        : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-                                        }`}
-                                >
-                                    {size}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50/50">
-                                    <th className="pl-4 pr-1 py-4 w-8"></th>
-                                    <th className="px-6 py-4 font-medium text-slate-500 text-sm">Fecha</th>
-                                    <th className="px-6 py-4 font-medium text-slate-500 text-sm">Concepto</th>
-                                    <th className="px-6 py-4 font-medium text-slate-500 text-sm">Categoría</th>
-                                    <th className="px-6 py-4 font-medium text-slate-500 text-sm">Cuenta</th>
-                                    <th className="px-6 py-4 font-medium text-slate-500 text-sm text-right">Monto</th>
-                                    <th className="px-6 py-4 font-medium text-slate-500 text-sm w-10"></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {paginatedTransactions.length > 0 ? (
-                                    paginatedTransactions.map((tx) => (
-                                        <tr
-                                            key={tx.id}
-                                            className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors cursor-pointer group"
-                                            onClick={() => {
-                                                setEditingTransaction(tx);
-                                                setIsModalOpen(true);
-                                            }}
-                                        >
-                                            <td className="pl-4 pr-1 py-4 w-14">
-                                                <div className="flex items-center gap-1">
-                                                    {tx.context === 'business' ? (
-                                                        <span className="material-symbols-outlined text-amber-500 text-sm" title="Negocio">storefront</span>
-                                                    ) : (
-                                                        <span className="material-symbols-outlined text-blue-500 text-sm" title="Personal">person</span>
-                                                    )}
-                                                    {(tx.type === 'transfer' || tx.isTransfer) ? (
-                                                        <span className="material-symbols-outlined text-indigo-500 text-sm" title="Transferencia">swap_horiz</span>
-                                                    ) : tx.type === 'credit' ? (
-                                                        <span className="material-symbols-outlined text-emerald-500 text-sm" title="Ingreso">arrow_upward</span>
-                                                    ) : (
-                                                        <span className="material-symbols-outlined text-rose-500 text-sm" title="Egreso">arrow_downward</span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600">
-                                                {format(tx.date, "dd MMM yyyy", { locale: es })}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="font-medium text-slate-800">{tx.title || tx.description}</div>
-                                                {tx.comments && <div className="text-[10px] text-slate-400 mt-1">{tx.comments}</div>}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex flex-col items-start gap-1">
-                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                                                        {tx.category || 'General'}
-                                                    </span>
-                                                    {tx.subcategory && (
-                                                        <span className="text-[10px] text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
-                                                            {tx.subcategory}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600">
-                                                {(tx.type === 'transfer' || tx.isTransfer)
-                                                    ? <>{tx.card || 'Efectivo'} <span className="text-indigo-400">→</span> {tx.destinationCard || '?'}</>
-                                                    : (tx.card || tx.account || 'Efectivo')}
-                                            </td>
-                                            <td className={`px-6 py-4 text-sm font-semibold text-right ${(tx.type === 'transfer' || tx.isTransfer) ? 'text-indigo-600' : tx.type === 'credit' ? 'text-emerald-500' : 'text-slate-800'}`}>
-                                                <div className="flex items-center justify-end gap-1.5">
-                                                    <span>
-                                                        {(tx.type === 'transfer' || tx.isTransfer) ? '' : tx.type === 'credit' ? '+' : '-'}{formatCurrency(tx.amount || 0, tx.currency || 'USD')}
-                                                    </span>
-                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${tx.type === 'credit' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
-                                                        {tx.currency || 'USD'}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setConfirmDelete({ isOpen: true, txId: tx.id });
-                                                    }}
-                                                    className="text-slate-400 md:text-slate-300 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
-                                                    title="Eliminar transacción"
-                                                >
-                                                    <span className="material-symbols-outlined text-[16px]">delete</span>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan="7" className="px-6 py-12 text-center text-slate-400">
-                                            No se encontraron transacciones en este rango de fechas.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {totalPages > 1 && (
-                        <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
-                            <span className="text-sm text-slate-500">
-                                Mostrando página <span className="font-medium text-slate-700">{currentPage}</span> de <span className="font-medium text-slate-700">{totalPages}</span>
-                            </span>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                    disabled={currentPage === 1}
-                                    className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-white hover:text-primary disabled:opacity-50 disabled:hover:bg-transparent transition-all flex items-center justify-center w-8 h-8 font-bold"
-                                >
-                                    &lt;
-                                </button>
-                                <button
-                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                    disabled={currentPage === totalPages}
-                                    className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-white hover:text-primary disabled:opacity-50 disabled:hover:bg-transparent transition-all flex items-center justify-center w-8 h-8 font-bold"
-                                >
-                                    &gt;
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* Analysis/Summary Section */}
-                {searchSummary.hasData && (
-                    <div className="flex flex-col gap-4 mt-2">
-                        <div className="flex items-center gap-2 mb-2">
-                            <h2 className="text-xl font-bold text-slate-800">Resumen de Resultados</h2>
-                            <span className="px-2 py-1 bg-slate-100 text-slate-500 text-xs font-bold rounded-lg uppercase tracking-wider">
-                                {searchSummary.currency}
-                            </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                            {/* Totales por Tipo */}
-                            <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-white/50 shadow-sm p-6 flex flex-col h-full">
-                                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wider">
-                                    <span className="material-symbols-outlined text-slate-400 text-lg">donut_large</span>
-                                    Flujo Neto
-                                </h3>
-                                <div className="space-y-4 flex-1">
-                                    <div className="flex justify-between items-center p-3 bg-emerald-50/50 rounded-2xl border border-emerald-100/50">
-                                        <div className="flex items-center gap-2 text-emerald-600">
-                                            <span className="material-symbols-outlined text-sm">arrow_upward</span>
-                                            <span className="font-medium text-sm">Ingresos</span>
-                                        </div>
-                                        <span className="font-bold text-emerald-600">
-                                            +{formatCurrency(searchSummary.totalIngresos, searchSummary.currency)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center p-3 bg-rose-50/50 rounded-2xl border border-rose-100/50">
-                                        <div className="flex items-center gap-2 text-rose-600">
-                                            <span className="material-symbols-outlined text-sm">arrow_downward</span>
-                                            <span className="font-medium text-sm">Egresos</span>
-                                        </div>
-                                        <span className="font-bold text-rose-600">
-                                            -{formatCurrency(searchSummary.totalEgresos, searchSummary.currency)}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100/50">
-                                        <div className="flex items-center gap-2 text-indigo-600">
-                                            <span className="material-symbols-outlined text-sm">swap_horiz</span>
-                                            <span className="font-medium text-sm">Transferencias</span>
-                                        </div>
-                                        <span className="font-bold text-indigo-600">
-                                            {formatCurrency(searchSummary.totalTransferencias, searchSummary.currency)}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="mt-4 pt-4 border-t border-slate-100/50 flex justify-between items-center">
-                                    <span className="text-sm font-bold text-slate-500">Balance Periodo</span>
-                                    <span className={`font-extrabold ${searchSummary.totalIngresos - searchSummary.totalEgresos >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                        {(searchSummary.totalIngresos - searchSummary.totalEgresos >= 0 ? '+' : '')}
-                                        {formatCurrency(searchSummary.totalIngresos - searchSummary.totalEgresos, searchSummary.currency)}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Gastos por Categoría */}
-                            <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-white/50 shadow-sm p-6 flex flex-col h-full max-h-[360px]">
-                                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wider">
-                                    <span className="material-symbols-outlined text-purple-400 text-lg">pie_chart</span>
-                                    Egresos por Categoría
-                                </h3>
-                                <div className="overflow-y-auto pr-2 space-y-3 flex-1 custom-scrollbar">
-                                    {searchSummary.categories.length > 0 ? searchSummary.categories.map((cat) => {
-                                        const catConfig = appConfig?.categories?.find(c => c.name === cat.name);
-                                        const icon = catConfig?.icon || 'category';
-                                        return (
-                                            <div key={cat.name} className="flex justify-between items-center text-sm">
-                                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                    <span className="material-symbols-outlined text-purple-400 text-lg shrink-0">{icon}</span>
-                                                    <span className="text-slate-600 font-medium truncate" title={cat.name}>{cat.name}</span>
-                                                </div>
-                                                <span className="font-bold text-slate-800 ml-2 shrink-0">
-                                                    {formatCurrency(cat.amount, searchSummary.currency)}
-                                                </span>
-                                            </div>
-                                        );
-                                    }) : (
-                                        <p className="text-sm text-slate-400 italic text-center py-4">No hay egresos registrados.</p>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Gastos por Subcategoría */}
-                            <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-white/50 shadow-sm p-6 flex flex-col h-full max-h-[360px]">
-                                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wider">
-                                    <span className="material-symbols-outlined text-amber-400 text-lg">list_alt</span>
-                                    Top Subcategorías
-                                </h3>
-                                <div className="overflow-y-auto pr-2 space-y-3 flex-1 custom-scrollbar">
-                                    {searchSummary.subcategories.length > 0 ? searchSummary.subcategories.map((sub) => {
-                                        const [cat, subcat] = sub.name.split(' - ');
-                                        const catConfig = appConfig?.categories?.find(c => c.name === cat);
-                                        const icon = catConfig?.icon || 'category';
-                                        return (
-                                            <div key={sub.name} className="flex justify-between items-center text-sm">
-                                                <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                    <span className="material-symbols-outlined text-amber-500 text-lg shrink-0">{icon}</span>
-                                                    <div className="flex flex-col min-w-0 flex-1">
-                                                        <span className="text-slate-800 font-medium truncate" title={subcat}>{subcat}</span>
-                                                        <span className="text-[10px] text-slate-400 truncate uppercase tracking-wider">{cat}</span>
-                                                    </div>
-                                                </div>
-                                                <span className="font-bold text-slate-800 ml-2 shrink-0">
-                                                    {formatCurrency(sub.amount, searchSummary.currency)}
-                                                </span>
-                                            </div>
-                                        );
-                                    }) : (
-                                        <p className="text-sm text-slate-400 italic text-center py-4">No hay subcategorías registradas.</p>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Movimientos por Cuenta */}
-                            <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-white/50 shadow-sm p-6 flex flex-col h-full max-h-[360px]">
-                                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-wider">
-                                    <span className="material-symbols-outlined text-blue-400 text-lg">account_balance_wallet</span>
-                                    Flujo Neto por Cuenta
-                                </h3>
-                                <div className="overflow-y-auto pr-2 space-y-3 flex-1 custom-scrollbar">
-                                    {searchSummary.accounts.length > 0 ? searchSummary.accounts.map((acc) => (
-                                        <div key={acc.name} className="flex justify-between items-center text-sm">
-                                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                                                <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0"></div>
-                                                <span className="text-slate-600 font-medium truncate" title={acc.name}>{acc.name}</span>
-                                            </div>
-                                            <span className={`font-bold shrink-0 ml-2 ${acc.amount > 0 ? 'text-emerald-500' : acc.amount < 0 ? 'text-rose-500' : 'text-slate-500'}`}>
-                                                {acc.amount > 0 ? '+' : ''}{formatCurrency(acc.amount, searchSummary.currency)}
-                                            </span>
-                                        </div>
-                                    )) : (
-                                        <p className="text-sm text-slate-400 italic text-center py-4">No hay flujos registrados.</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            <TransactionModal
-                isOpen={isModalOpen}
-                onClose={() => { setIsModalOpen(false); setEditingTransaction(null); }}
-                editingTransaction={editingTransaction}
-            />
-
-            <ConfirmModal
-                isOpen={confirmDelete.isOpen}
-                onClose={() => setConfirmDelete({ isOpen: false, txId: null })}
-                onConfirm={() => {
-                    if (confirmDelete.txId) {
-                        deleteTransaction(confirmDelete.txId);
-                    }
-                }}
-                title="Eliminar Transacción"
-                message="¿Estás seguro de que deseas eliminar esta transacción? Esta acción no se puede deshacer."
-                confirmText="Eliminar"
-                cancelText="Cancelar"
-                isDestructive={true}
-            />
+      {/* Filter panel */}
+      <Card padding={16} style={{ marginBottom: 20 }}>
+        {/* Search row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-default)', border: '1px solid var(--border-default)', borderRadius: 12, padding: '0 12px', marginBottom: 14 }}>
+          <Icon name="search" size={18} color="var(--fg-3)" />
+          <input
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            placeholder="Buscar por título o comentario…"
+            style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '10px 0', fontSize: 14, color: 'var(--fg-1)', fontFamily: 'var(--font-sans)' }}
+          />
+          {searchText && (
+            <button type="button" onClick={() => setSearchText('')} style={{ border: 'none', background: 'transparent', color: 'var(--fg-3)', cursor: 'pointer', padding: 4 }}>
+              <Icon name="close" size={16} />
+            </button>
+          )}
         </div>
-    );
-}
 
+        {/* Filter rows */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <FilterField label="Fechas">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ ...filterInputStyle, flex: 1, minWidth: 0 }} />
+              <span style={{ color: 'var(--fg-4)', fontSize: 12 }}>—</span>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ ...filterInputStyle, flex: 1, minWidth: 0 }} />
+            </div>
+          </FilterField>
+
+          <FilterField label="Tipo">
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ ...filterInputStyle, appearance: 'none', cursor: 'pointer' }}>
+              <option value="">Todos</option>
+              <option value="credit">Ingreso</option>
+              <option value="debit">Egreso</option>
+              <option value="transfer">Transferencia</option>
+            </select>
+          </FilterField>
+
+          <FilterField label="Categoría">
+            <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setSubcategoryFilter(''); }} style={{ ...filterInputStyle, appearance: 'none', cursor: 'pointer' }}>
+              <option value="">Todas</option>
+              {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </FilterField>
+
+          <FilterField label="Subcategoría">
+            <select value={subcategoryFilter} onChange={e => setSubcategoryFilter(e.target.value)} style={{ ...filterInputStyle, appearance: 'none', cursor: 'pointer' }}>
+              <option value="">Todas</option>
+              {uniqueSubcategories.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </FilterField>
+
+          <FilterField label="Cuenta">
+            <select value={accountFilter} onChange={e => setAccountFilter(e.target.value)} style={{ ...filterInputStyle, appearance: 'none', cursor: 'pointer' }}>
+              <option value="">Todas</option>
+              {uniqueAccounts.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </FilterField>
+
+          <FilterField label="Monto mín.">
+            <input type="number" placeholder="0" value={minAmountFilter} onChange={e => setMinAmountFilter(e.target.value)} style={filterInputStyle} />
+          </FilterField>
+
+          <FilterField label="Monto máx.">
+            <input type="number" placeholder="∞" value={maxAmountFilter} onChange={e => setMaxAmountFilter(e.target.value)} style={filterInputStyle} />
+          </FilterField>
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setNoSubcategoryOnly(v => !v)}
+              style={{
+                height: 38, padding: '0 12px', borderRadius: 10, cursor: 'pointer',
+                border: `1px solid ${noSubcategoryOnly ? 'var(--amber-400)' : 'var(--border-default)'}`,
+                background: noSubcategoryOnly ? 'var(--amber-50)' : 'var(--bg-default)',
+                color: noSubcategoryOnly ? 'var(--warning-700)' : 'var(--fg-3)',
+                fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Icon name={noSubcategoryOnly ? 'check_box' : 'check_box_outline_blank'} size={16} />
+              Sin subcat.
+            </button>
+            <button
+              type="button"
+              onClick={clearFilters}
+              style={{
+                height: 38, padding: '0 14px', borderRadius: 10, cursor: 'pointer',
+                border: '1px solid var(--border-default)', background: 'var(--bg-default)',
+                color: 'var(--fg-2)', fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Icon name="filter_list_off" size={16} />
+              Limpiar
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Balance evolution chart */}
+      {chartData.currencies.length > 0 && chartData.dataPoints.length > 1 && (
+        <Card padding={16} style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div>
+              <Eyebrow>Evolución de saldo</Eyebrow>
+            </div>
+            {chartData.currencies.length > 1 && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                {chartData.currencies.map(cur => {
+                  const color = CURRENCY_COLORS[cur] || CURRENCY_COLORS.DEFAULT;
+                  const active = cur === selectedCurrency;
+                  return (
+                    <button
+                      key={cur}
+                      type="button"
+                      onClick={() => setSelectedCurrency(cur)}
+                      style={{
+                        padding: '4px 10px', borderRadius: 9999, border: `1.5px solid ${color}`,
+                        background: active ? color : 'transparent', color: active ? '#fff' : color,
+                        fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 11, cursor: 'pointer',
+                      }}
+                    >{cur}</button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div style={{ height: 200, width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData.dataPoints} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
+                <XAxis dataKey="date" stroke="var(--fg-4)" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--fg-4)" fontSize={11} axisLine={false} tickLine={false} tickFormatter={v => formatCompactNumber(v)} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: '1px solid var(--border-default)', background: 'var(--bg-raised)', boxShadow: 'var(--shadow-md)', fontFamily: 'var(--font-sans)' }}
+                  formatter={(val) => [formatCurrency(val, selectedCurrency || chartData.currencies[0]), `Balance`]}
+                  labelStyle={{ color: 'var(--fg-3)', fontWeight: 600, marginBottom: 4 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey={selectedCurrency || chartData.currencies[0]}
+                  stroke={CURRENCY_COLORS[selectedCurrency] || CURRENCY_COLORS.DEFAULT}
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 5, strokeWidth: 0, fill: CURRENCY_COLORS[selectedCurrency] || CURRENCY_COLORS.DEFAULT }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
+
+      {/* Transaction list */}
+      <Card padding={0} style={{ marginBottom: 20, overflow: 'hidden' }}>
+        {/* List header */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '14px 16px 12px',
+          borderBottom: '1px solid var(--border-subtle)',
+        }}>
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg-1)' }}>
+              {processedTransactions.length} transacciones
+            </span>
+          </div>
+          {/* Page size switcher */}
+          <div style={{ display: 'flex', background: 'var(--bg-sunken)', padding: 3, borderRadius: 10, gap: 2 }}>
+            {[10, 20, 50].map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => { setPageSize(s); setCurrentPage(1); }}
+                style={{
+                  padding: '4px 10px', border: 'none', cursor: 'pointer', borderRadius: 7,
+                  fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: pageSize === s ? 800 : 600,
+                  background: pageSize === s ? 'var(--bg-raised)' : 'transparent',
+                  color: pageSize === s ? 'var(--fg-1)' : 'var(--fg-3)',
+                  boxShadow: pageSize === s ? 'var(--shadow-xs)' : 'none',
+                }}
+              >{s}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--fg-4)', fontWeight: 700, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Tipo</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--fg-4)', fontWeight: 700, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Fecha</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--fg-4)', fontWeight: 700, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Concepto</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--fg-4)', fontWeight: 700, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Categoría</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', color: 'var(--fg-4)', fontWeight: 700, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Cuenta</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', color: 'var(--fg-4)', fontWeight: 700, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Monto</th>
+                <th style={{ width: 40 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedTransactions.length > 0 ? paginatedTransactions.map(tx => {
+                const isTransfer = tx.type === 'transfer' || tx.isTransfer;
+                const amountColor = isTransfer ? 'var(--plum-400)' : tx.type === 'credit' ? 'var(--success-700)' : 'var(--fg-1)';
+                const sign = isTransfer ? '' : tx.type === 'credit' ? '+' : '−';
+                const hue = hueForCategory(tx.category);
+                return (
+                  <tr
+                    key={tx.id}
+                    onClick={() => { setEditingTransaction(tx); setIsModalOpen(true); }}
+                    style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'background var(--dur-fast) var(--ease-out)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--ink-50)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <td style={{ padding: '10px 16px' }}>
+                      <IconTile icon={txIcon(tx)} hue={hue} size={32} />
+                    </td>
+                    <td style={{ padding: '10px 16px', color: 'var(--fg-3)', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                      {format(tx.date, 'dd MMM yyyy', { locale: es })}
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--fg-1)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {tx.title || tx.description}
+                      </div>
+                      {tx.comments && <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{tx.comments}</div>}
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <Pill variant="neutral" style={{ fontSize: 11 }}>{tx.category || 'General'}</Pill>
+                        {tx.subcategory && <span style={{ fontSize: 10, color: 'var(--fg-4)', fontWeight: 600 }}>{tx.subcategory}</span>}
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 16px', color: 'var(--fg-2)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      {isTransfer
+                        ? <>{tx.card || 'Efectivo'} <span style={{ color: 'var(--plum-400)' }}>→</span> {tx.destinationCard || '?'}</>
+                        : (tx.card || tx.account || 'Efectivo')}
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: amountColor }}>
+                        {sign}{formatCurrency(Math.abs(tx.amount || 0), tx.currency || 'COP')}
+                      </span>
+                      <span style={{ fontSize: 9, color: 'var(--fg-4)', fontWeight: 700, letterSpacing: '0.08em', marginLeft: 5, textTransform: 'uppercase' }}>
+                        {tx.currency || 'COP'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 8px' }}>
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setConfirmDelete({ isOpen: true, txId: tx.id }); }}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--fg-4)', cursor: 'pointer', padding: 4, borderRadius: 6 }}
+                        onMouseEnter={e => e.currentTarget.style.color = 'var(--danger-700)'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'var(--fg-4)'}
+                      >
+                        <Icon name="delete" size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <tr>
+                  <td colSpan="7" style={{ padding: '40px 20px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                      <IconTile icon="receipt_long" hue="ink" size={48} />
+                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg-2)' }}>No hay coincidencias.</span>
+                      <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>Prueba con otro filtro o limpia la búsqueda.</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '12px 16px', borderTop: '1px solid var(--border-subtle)',
+            background: 'var(--bg-canvas)',
+          }}>
+            <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+              Página <strong style={{ color: 'var(--fg-1)' }}>{currentPage}</strong> de <strong style={{ color: 'var(--fg-1)' }}>{totalPages}</strong>
+            </span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                style={{ width: 32, height: 32, border: '1px solid var(--border-default)', borderRadius: 9, background: 'var(--bg-raised)', color: 'var(--fg-2)', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="chevron_left" size={18} />
+              </button>
+              <button type="button" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                style={{ width: 32, height: 32, border: '1px solid var(--border-default)', borderRadius: 9, background: 'var(--bg-raised)', color: 'var(--fg-2)', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="chevron_right" size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* Analysis summary */}
+      {searchSummary.hasData && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>Resumen</h2>
+            <Pill variant="neutral">{searchSummary.currency}</Pill>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+
+            {/* Flujo neto */}
+            <Card padding={16}>
+              <Eyebrow style={{ marginBottom: 12 }}>Flujo neto</Eyebrow>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--success-50)', borderRadius: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--success-700)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="arrow_upward" size={14} /> Ingresos
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--success-700)', fontSize: 12 }}>+{formatCurrency(searchSummary.totalIngresos, searchSummary.currency)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--danger-50)', borderRadius: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--danger-700)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="arrow_downward" size={14} /> Egresos
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--danger-700)', fontSize: 12 }}>-{formatCurrency(searchSummary.totalEgresos, searchSummary.currency)}</span>
+                </div>
+                {searchSummary.totalTransferencias > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--tint-plum)', borderRadius: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--plum-400)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Icon name="swap_horiz" size={14} /> Transferencias
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--plum-400)', fontSize: 12 }}>{formatCurrency(searchSummary.totalTransferencias, searchSummary.currency)}</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: 'var(--fg-3)', fontWeight: 700 }}>Balance periodo</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, fontSize: 13, color: searchSummary.totalIngresos - searchSummary.totalEgresos >= 0 ? 'var(--success-700)' : 'var(--danger-700)' }}>
+                  {searchSummary.totalIngresos - searchSummary.totalEgresos >= 0 ? '+' : '-'}{formatCurrency(Math.abs(searchSummary.totalIngresos - searchSummary.totalEgresos), searchSummary.currency)}
+                </span>
+              </div>
+            </Card>
+
+            {/* Egresos por categoría */}
+            {searchSummary.categories.length > 0 && (
+              <Card padding={16} style={{ maxHeight: 280, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <Eyebrow style={{ marginBottom: 12 }}>Egresos por categoría</Eyebrow>
+                <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {searchSummary.categories.map(cat => {
+                    const hue = hueForCategory(cat.name);
+                    return (
+                      <div key={cat.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: 9999, background: hueColorVar(hue), flexShrink: 0 }} />
+                          {cat.name}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg-1)', marginLeft: 10, flexShrink: 0 }}>
+                          {formatCurrency(cat.amount, searchSummary.currency)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {/* Top subcategorías */}
+            {searchSummary.subcategories.length > 0 && (
+              <Card padding={16} style={{ maxHeight: 280, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <Eyebrow style={{ marginBottom: 12 }}>Top subcategorías</Eyebrow>
+                <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {searchSummary.subcategories.map(sub => {
+                    const [cat, subcat] = sub.name.split(' - ');
+                    return (
+                      <div key={sub.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subcat || sub.name}</div>
+                          <div style={{ fontSize: 10, color: 'var(--fg-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{cat}</div>
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg-1)', fontSize: 12, flexShrink: 0 }}>
+                          {formatCurrency(sub.amount, searchSummary.currency)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {/* Flujo por cuenta */}
+            {searchSummary.accounts.length > 0 && (
+              <Card padding={16} style={{ maxHeight: 280, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <Eyebrow style={{ marginBottom: 12 }}>Flujo por cuenta</Eyebrow>
+                <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {searchSummary.accounts.map(acc => (
+                    <div key={acc.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                      <span style={{ color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{acc.name}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, marginLeft: 10, flexShrink: 0, color: acc.amount > 0 ? 'var(--success-700)' : acc.amount < 0 ? 'var(--danger-700)' : 'var(--fg-3)' }}>
+                        {acc.amount > 0 ? '+' : ''}{formatCurrency(acc.amount, searchSummary.currency)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
+        </>
+      )}
+
+      <TransactionModal
+        isOpen={isModalOpen}
+        onClose={() => { setIsModalOpen(false); setEditingTransaction(null); }}
+        editingTransaction={editingTransaction}
+      />
+      <ConfirmModal
+        isOpen={confirmDelete.isOpen}
+        onClose={() => setConfirmDelete({ isOpen: false, txId: null })}
+        onConfirm={() => { if (confirmDelete.txId) deleteTransaction(confirmDelete.txId); }}
+        title="Eliminar transacción"
+        message="¿Estás seguro de que deseas eliminar esta transacción? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        isDestructive
+      />
+    </div>
+  );
+}

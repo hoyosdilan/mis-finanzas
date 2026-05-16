@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useFinance } from '../context/FinanceContext';
+import { Icon, Field } from './ds/Primitives';
+
+const INPUT_STYLE = {
+    width: '100%', padding: '10px 14px',
+    background: 'var(--bg-sunken)',
+    border: '1px solid var(--border-default)',
+    borderRadius: 'var(--r-lg)',
+    fontFamily: 'var(--font-sans)', fontSize: 14,
+    color: 'var(--fg-1)', outline: 'none',
+    boxSizing: 'border-box',
+};
 
 export default function MetaModal({ isOpen, onClose, currentContext, editingMeta }) {
     const { addGoal, updateGoal, appConfig } = useFinance();
@@ -20,7 +31,6 @@ export default function MetaModal({ isOpen, onClose, currentContext, editingMeta
                 contexto: editingMeta.contexto || currentContext || 'personal',
             });
         } else {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setFormData({
                 nombre: '',
                 objetivo: '',
@@ -32,6 +42,8 @@ export default function MetaModal({ isOpen, onClose, currentContext, editingMeta
 
     if (!isOpen) return null;
 
+    const set = (key, val) => setFormData(prev => ({ ...prev, [key]: val }));
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -41,7 +53,6 @@ export default function MetaModal({ isOpen, onClose, currentContext, editingMeta
                 cuenta: formData.cuenta,
                 contexto: formData.contexto,
             };
-
             if (editingMeta) {
                 await updateGoal(editingMeta.id, dataToSave);
             } else {
@@ -54,85 +65,139 @@ export default function MetaModal({ isOpen, onClose, currentContext, editingMeta
     };
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto"
-            onClick={(e) => {
-                if (e.target === e.currentTarget) onClose();
-            }}
-        >
-            <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl relative my-8">
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"
+        <>
+            <div
+                style={{
+                    position: 'fixed', inset: 0, zIndex: 90,
+                    background: 'var(--bg-overlay)',
+                    backdropFilter: 'blur(4px)',
+                }}
+                onClick={onClose}
+            />
+            <div style={{
+                position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 91,
+                background: 'var(--bg-raised)',
+                borderTopLeftRadius: 28, borderTopRightRadius: 28,
+                boxShadow: 'var(--shadow-xl)',
+                animation: 'sheetIn var(--dur-slow) var(--ease-out)',
+                maxHeight: '90dvh',
+                display: 'flex', flexDirection: 'column',
+            }}>
+                {/* Drag handle */}
+                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4, flexShrink: 0 }}>
+                    <div style={{ width: 40, height: 4, borderRadius: 2, background: 'var(--border-default)' }} />
+                </div>
+
+                {/* Header */}
+                <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 20px 16px',
+                    borderBottom: '1px solid var(--border-subtle)',
+                    flexShrink: 0,
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                            width: 36, height: 36, borderRadius: 10,
+                            background: 'var(--plum-50)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            <Icon name="track_changes" size={20} color="var(--plum-600)" />
+                        </div>
+                        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>
+                            {editingMeta ? 'Editar Meta' : 'Nueva Meta'}
+                        </h2>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        style={{
+                            width: 36, height: 36,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            borderRadius: 10, border: 'none', cursor: 'pointer',
+                            background: 'var(--bg-sunken)', color: 'var(--fg-3)',
+                        }}
+                    >
+                        <Icon name="close" size={18} />
+                    </button>
+                </div>
+
+                {/* Form */}
+                <form
+                    onSubmit={handleSubmit}
+                    style={{ padding: '20px 20px 32px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}
                 >
-                    <span className="material-symbols-outlined text-lg">close</span>
-                </button>
-
-                <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-purple-500">track_changes</span>
-                    {editingMeta ? 'Editar Meta' : 'Nueva Meta'}
-                </h2>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre de la Meta</label>
+                    <Field label="Nombre de la meta">
                         <input
                             required
                             type="text"
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                             placeholder="ej. Viaje a Japón"
                             value={formData.nombre}
-                            onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                            onChange={e => set('nombre', e.target.value)}
+                            style={INPUT_STYLE}
                         />
-                    </div>
+                    </Field>
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Objetivo Final ($)</label>
-                        <input
-                            required
-                            type="number"
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                            placeholder="0"
-                            value={formData.objetivo}
-                            onChange={(e) => setFormData({ ...formData, objetivo: e.target.value })}
-                        />
-                    </div>
+                    <Field label="Objetivo final">
+                        <div style={{ position: 'relative' }}>
+                            <span style={{
+                                position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                                fontSize: 15, fontWeight: 700, color: 'var(--fg-3)',
+                                fontFamily: 'var(--font-mono)',
+                            }}>$</span>
+                            <input
+                                required
+                                type="number"
+                                placeholder="0"
+                                value={formData.objetivo}
+                                onChange={e => set('objetivo', e.target.value)}
+                                style={{ ...INPUT_STYLE, paddingLeft: 30, fontFamily: 'var(--font-mono)', fontWeight: 600 }}
+                            />
+                        </div>
+                    </Field>
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cuenta vinculada</label>
+                    <Field label="Cuenta vinculada">
                         <select
                             required
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                             value={formData.cuenta}
-                            onChange={(e) => setFormData({ ...formData, cuenta: e.target.value })}
+                            onChange={e => set('cuenta', e.target.value)}
+                            style={INPUT_STYLE}
                         >
                             <option value="">Selecciona una cuenta...</option>
                             {appConfig?.accounts?.map(acc => (
                                 <option key={acc} value={acc}>{acc}</option>
                             ))}
                         </select>
-                        <p className="text-[10px] text-slate-400 mt-1">Los créditos a esta cuenta se sumarán al progreso de la meta.</p>
-                    </div>
+                        <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--fg-4)', lineHeight: 1.4 }}>
+                            Los créditos a esta cuenta se sumarán al progreso de la meta.
+                        </p>
+                    </Field>
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contexto</label>
+                    <Field label="Contexto">
                         <select
-                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                             value={formData.contexto}
-                            onChange={(e) => setFormData({ ...formData, contexto: e.target.value })}
+                            onChange={e => set('contexto', e.target.value)}
+                            style={INPUT_STYLE}
                         >
                             <option value="personal">Personal</option>
                             <option value="business">Negocio</option>
                         </select>
-                    </div>
+                    </Field>
 
-                    <div className="pt-4">
-                        <button type="submit" className="w-full py-3 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-xl shadow-sm transition-colors">
-                            Guardar Meta
-                        </button>
-                    </div>
+                    <button
+                        type="submit"
+                        style={{
+                            width: '100%', padding: '14px 20px',
+                            borderRadius: 'var(--r-xl)', border: 'none',
+                            background: 'var(--plum-400)', color: '#fff',
+                            fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 15,
+                            cursor: 'pointer', marginTop: 4,
+                            boxShadow: '0 4px 16px -4px rgba(155, 92, 246, 0.45)',
+                            transition: 'opacity var(--dur-fast) var(--ease-out)',
+                        }}
+                    >
+                        Guardar Meta
+                    </button>
                 </form>
             </div>
-        </div>
+        </>
     );
 }

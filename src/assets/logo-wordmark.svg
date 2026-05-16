@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" fill="none">
+  <rect x="4" y="8" width="48" height="48" rx="14" fill="#1F1B14"></rect>
+  <path d="M28 20a12 12 0 1 0 12 12h-7a5 5 0 1 1-5-5v-7z" fill="#C9582A"></path>
+  <path d="M31 20.4A12.01 12.01 0 0 1 39.6 29H31v-8.6z" fill="#DCA63B"></path>
+  <text x="68" y="36" font-family="&#39;Plus Jakarta Sans&#39;, -apple-system, sans-serif" font-weight="800" font-size="22" fill="#1F1B14" letter-spacing="-0.5">Mis Finanzas</text>
+  <text x="68" y="52" font-family="&#39;Plus Jakarta Sans&#39;, -apple-system, sans-serif" font-weight="600" font-size="9" fill="#8A7E6E" letter-spacing="2">DASHBOARD PERSONAL</text>
+</svg>
