@@ -26,7 +26,7 @@ GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 DEFAULT_LABEL = "Bancos/PendingBot"
 
 # Modelo de Gemini
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 # Documento de Firestore donde vive el token de OAuth de Gmail
 TOKEN_COLLECTION = 'gmail_auth'
