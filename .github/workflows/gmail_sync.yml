@@ -1,0 +1,32 @@
+name: Gmail Finance Sync
+
+on:
+  schedule:
+    # Cada 10 minutos. Nota: GitHub Actions puede retrasar las ejecuciones
+    # programadas varios minutos cuando hay carga alta.
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+# Evita que dos ejecuciones se solapen (procesarían el mismo correo a la vez).
+concurrency:
+  group: gmail-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Gmail sync
+        run: python gmail_finanzas_sync.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FIREBASE_ADMIN_SDK_JSON: ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
