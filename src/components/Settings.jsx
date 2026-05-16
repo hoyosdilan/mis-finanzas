@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { Icon } from './ds/Primitives';
+import { useAuth } from '../context/AuthContext';
+import { Icon, Card, Eyebrow, IconTile } from './ds/Primitives';
 import ConfirmModal from './ConfirmModal';
 
 const INPUT_STYLE = {
@@ -630,11 +631,16 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
     );
 };
 
-export default function Settings() {
+export default function Settings({ onNavigate }) {
     const { appConfig, updateAppConfig } = useFinance();
+    const { currentUser, logout } = useAuth();
     const [saving, setSaving] = useState(false);
     const [newCurrency, setNewCurrency] = useState('');
     const [newAccount, setNewAccount] = useState('');
+
+    const displayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Usuario';
+    const email = currentUser?.email || '';
+    const initial = displayName.charAt(0).toUpperCase();
 
     const handleAddItem = async (listName, value, setter) => {
         if (!value.trim()) return;
@@ -686,47 +692,109 @@ export default function Settings() {
     const sharedSectionProps = { appConfig, saving, handleAddItem, handleRemoveItem, handleMoveItemUp, handleEditItem };
 
     return (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 48px' }}>
-            <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-                <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: '1px solid var(--border-subtle)' }}>
-                    <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em' }}>
-                        Configuración
-                    </h1>
-                    <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--fg-3)', fontWeight: 500 }}>
-                        Personaliza las opciones y catálogos de tu aplicación.
-                    </p>
-                </div>
+        <div className="animate-fade-up" style={{ maxWidth: 1000, margin: '0 auto', padding: '16px 16px 32px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                    gap: 20,
-                }}>
-                    <ConfigSection
-                        {...sharedSectionProps}
-                        title="Monedas"
-                        icon="payments"
-                        listName="currencies"
-                        inputValue={newCurrency}
-                        setInputValue={setNewCurrency}
-                        placeholder="Ej. GBP"
-                    />
-                    <ConfigSection
-                        {...sharedSectionProps}
-                        title="Tarjetas y Cuentas"
-                        icon="credit_card"
-                        listName="accounts"
-                        inputValue={newAccount}
-                        setInputValue={setNewAccount}
-                        placeholder="Ej. Santander Débito"
-                    />
-                    <CategoryConfigSection
-                        appConfig={appConfig}
-                        saving={saving}
-                        updateAppConfig={updateAppConfig}
-                    />
-                </div>
+            {/* Page title */}
+            <div>
+                <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em' }}>Yo</h1>
+                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--fg-3)' }}>Tu cuenta, catálogos y preferencias.</p>
             </div>
+
+            {/* Profile hero */}
+            <Card padding={18} style={{ borderRadius: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    {currentUser?.photoURL ? (
+                        <img
+                            src={currentUser.photoURL} alt=""
+                            style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--bg-raised)', boxShadow: '0 0 0 1px var(--border-default)' }}
+                        />
+                    ) : (
+                        <div style={{
+                            width: 56, height: 56, borderRadius: '50%',
+                            background: 'linear-gradient(135deg, var(--clay-400), var(--clay-600))',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontFamily: 'var(--font-display)', fontStyle: 'italic', fontSize: 26,
+                            color: '#fff', fontWeight: 500,
+                            border: '2px solid var(--bg-raised)', boxShadow: '0 0 0 1px var(--border-default)',
+                        }}>{initial}</div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {displayName}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {email}
+                        </div>
+                    </div>
+                </div>
+            </Card>
+
+            {/* Catalogs */}
+            <Eyebrow style={{ paddingLeft: 4, marginTop: 4 }}>Catálogos</Eyebrow>
+            <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14,
+            }}>
+                <ConfigSection
+                    {...sharedSectionProps}
+                    title="Monedas"
+                    icon="payments"
+                    listName="currencies"
+                    inputValue={newCurrency}
+                    setInputValue={setNewCurrency}
+                    placeholder="Ej. GBP"
+                />
+                <ConfigSection
+                    {...sharedSectionProps}
+                    title="Tarjetas y Cuentas"
+                    icon="credit_card"
+                    listName="accounts"
+                    inputValue={newAccount}
+                    setInputValue={setNewAccount}
+                    placeholder="Ej. Santander Débito"
+                />
+                <CategoryConfigSection
+                    appConfig={appConfig}
+                    saving={saving}
+                    updateAppConfig={updateAppConfig}
+                />
+            </div>
+
+            {/* More */}
+            <Eyebrow style={{ paddingLeft: 4, marginTop: 4 }}>Más</Eyebrow>
+            <Card padding={0}>
+                <button
+                    type="button"
+                    onClick={() => onNavigate && onNavigate('nutricion')}
+                    style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '13px 16px', background: 'transparent', border: 'none',
+                        cursor: 'pointer', textAlign: 'left',
+                    }}
+                >
+                    <IconTile icon="restaurant_menu" hue="amber" size={34} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg-1)' }}>Demo de Nutrición</div>
+                        <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 1 }}>
+                            Bonus · el sistema de diseño aplicado a otro módulo
+                        </div>
+                    </div>
+                    <Icon name="chevron_right" size={18} color="var(--fg-3)" />
+                </button>
+            </Card>
+
+            {/* Logout */}
+            <button
+                type="button"
+                onClick={logout}
+                style={{
+                    marginTop: 4, padding: '14px 0', background: 'transparent', border: 'none', cursor: 'pointer',
+                    color: 'var(--danger-700)', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-sans)',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+            >
+                <Icon name="logout" size={18} />
+                Cerrar sesión
+            </button>
         </div>
     );
 }

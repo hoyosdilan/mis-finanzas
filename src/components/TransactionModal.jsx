@@ -1,13 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { Timestamp } from 'firebase/firestore';
 import ConfirmModal from './ConfirmModal';
-import { Icon, Field, Segmented } from './ds/Primitives';
+import { Icon, Eyebrow, Segmented } from './ds/Primitives';
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',
   border: '1px solid var(--border-default)',
-  background: 'var(--bg-default)', borderRadius: 12, padding: '11px 12px',
+  background: 'var(--bg-raised)', borderRadius: 12, padding: '11px 12px',
   fontFamily: 'var(--font-sans)', fontSize: 14,
   color: 'var(--fg-1)', outline: 'none',
 };
@@ -16,6 +15,10 @@ const selectStyle = {
   ...inputStyle,
   appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer',
 };
+
+const FieldLabel = ({ children }) => (
+  <Eyebrow style={{ marginBottom: 6, paddingLeft: 2 }}>{children}</Eyebrow>
+);
 
 export default function TransactionModal({ isOpen, onClose, editingTransaction, initialMode = 'transaction' }) {
   const { addTransaction, updateTransaction, addTransfer, appConfig, deleteTransaction } = useFinance();
@@ -63,6 +66,7 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
       const isValid = filteredCategories.some(c => c.name === formData.category);
       if (!isValid) setFormData(prev => ({ ...prev, category: filteredCategories[0].name, subcategory: '' }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.type, formData.context, filteredCategories, mode, isOpen]);
 
   React.useEffect(() => {
@@ -120,7 +124,7 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
       let txDate = formData.date;
       if (!txDate) {
         const today = new Date();
-        txDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+        txDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       }
       if (mode === 'transfer') {
         if (formData.card === formData.destinationCard && formData.context === formData.destinationContext) {
@@ -171,223 +175,267 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
         onClick={onClose}
       />
 
-      {/* Bottom sheet */}
+      {/* Modal panel — full-height sheet on mobile, centered dialog on desktop */}
       <div
+        className="justify-end md:justify-center"
         style={{
-          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 91,
-          background: 'var(--bg-raised)',
-          borderTopLeftRadius: 28, borderTopRightRadius: 28,
-          maxHeight: '96dvh', overflowY: 'auto',
-          animation: 'sheetIn 280ms var(--ease-out)',
+          position: 'fixed', inset: 0, zIndex: 91,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          pointerEvents: 'none',
         }}
-        onClick={e => e.stopPropagation()}
       >
-        {/* Drag handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12, paddingBottom: 4 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--ink-100)' }} />
-        </div>
+        <div
+          className="rounded-t-[28px] md:rounded-[28px] md:my-6"
+          style={{
+            width: '100%', maxWidth: 520, maxHeight: '94dvh',
+            background: 'var(--bg-canvas)',
+            display: 'flex', flexDirection: 'column',
+            overflow: 'hidden', pointerEvents: 'auto',
+            animation: 'sheetIn 280ms var(--ease-out)',
+            boxShadow: 'var(--shadow-xl)',
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
 
-        <form onSubmit={handleSubmit} style={{ padding: '4px 20px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>
-              {title}
-            </h2>
-            <button type="button" onClick={onClose} style={{
-              width: 36, height: 36, borderRadius: 10, border: 'none',
-              background: 'var(--ink-50)', color: 'var(--fg-2)', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Icon name="close" size={18} />
-            </button>
-          </div>
-
-          {/* Type selector (transaction mode) */}
-          {mode === 'transaction' && (
-            <Segmented
-              value={formData.type}
-              onChange={v => set('type', v)}
-              options={[
-                { value: 'debit',  label: 'Gasto' },
-                { value: 'credit', label: 'Ingreso' },
-              ]}
-            />
-          )}
-
-          {/* Concepto */}
-          <Field label="Concepto">
-            <input
-              required
-              type="text"
-              placeholder={mode === 'transfer' ? 'Ej. Transferencia mensual' : 'Ej. Almuerzo'}
-              value={formData.title}
-              onChange={e => set('title', e.target.value)}
-              style={inputStyle}
-            />
-          </Field>
-
-          {/* Amount + currency */}
-          <Field label="Monto">
+            {/* Header */}
             <div style={{
-              display: 'flex', alignItems: 'center',
-              background: 'var(--bg-default)', border: '1px solid var(--border-default)',
-              borderRadius: 12, padding: '2px 14px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              padding: '16px 16px 12px', flexShrink: 0,
             }}>
-              <span style={{ color: 'var(--fg-3)', fontSize: 18, fontWeight: 600, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>$</span>
-              <input
-                required
-                type="number"
-                step="0.01"
-                placeholder="0"
-                value={formData.amount}
-                onChange={e => set('amount', e.target.value)}
-                style={{
-                  flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                  padding: '12px 10px', fontSize: 22, fontWeight: 800,
-                  color: 'var(--fg-1)', fontFamily: 'var(--font-mono)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}
-              />
-              <select
-                value={formData.currency}
-                onChange={e => set('currency', e.target.value)}
-                style={{
-                  border: 'none', background: 'transparent', color: 'var(--fg-2)',
-                  fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 12, letterSpacing: '0.08em',
-                  cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none',
-                }}
-              >
-                {(appConfig?.currencies || ['COP', 'USD']).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          </Field>
-
-          {/* Fecha + Contexto */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Fecha">
-              <input type="date" value={formData.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
-            </Field>
-            <Field label={mode === 'transfer' ? 'Contexto origen' : 'Contexto'}>
-              <div style={{ position: 'relative' }}>
-                <select value={formData.context} onChange={e => set('context', e.target.value)} style={selectStyle}>
-                  <option value="personal">Personal</option>
-                  <option value="business">Negocio</option>
-                </select>
-                <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              </div>
-            </Field>
-          </div>
-
-          {/* Source + Destination accounts */}
-          <div style={{ display: 'grid', gridTemplateColumns: mode === 'transfer' ? '1fr 1fr' : '1fr', gap: 12 }}>
-            <Field label={mode === 'transfer' ? 'Cuenta origen' : 'Tarjeta / Cuenta'}>
-              <div style={{ position: 'relative' }}>
-                <select required value={formData.card} onChange={e => set('card', e.target.value)} style={selectStyle}>
-                  <option value="" disabled>Seleccionar…</option>
-                  {(appConfig?.accounts || []).map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
-                <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              </div>
-            </Field>
-            {mode === 'transfer' && (
-              <Field label="Cuenta destino">
-                <div style={{ position: 'relative' }}>
-                  <select required value={formData.destinationCard} onChange={e => set('destinationCard', e.target.value)} style={selectStyle}>
-                    <option value="" disabled>Seleccionar…</option>
-                    {(appConfig?.accounts || []).map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                  <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                </div>
-              </Field>
-            )}
-          </div>
-
-          {/* Destination context (transfer) */}
-          {mode === 'transfer' && (
-            <Field label="Contexto destino">
-              <div style={{ position: 'relative' }}>
-                <select value={formData.destinationContext} onChange={e => set('destinationContext', e.target.value)} style={selectStyle}>
-                  <option value="personal">Personal</option>
-                  <option value="business">Negocio</option>
-                </select>
-                <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              </div>
-            </Field>
-          )}
-
-          {/* Categoría + Subcategoría */}
-          <div style={{ display: 'grid', gridTemplateColumns: currentSubcategories.length > 0 ? '1fr 1fr' : '1fr', gap: 12 }}>
-            <Field label="Categoría">
-              <div style={{ position: 'relative' }}>
-                <select
-                  value={formData.category}
-                  onChange={e => set('category', e.target.value) || set('subcategory', '')}
-                  style={selectStyle}
-                >
-                  {filteredCategories.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                </select>
-                <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              </div>
-            </Field>
-            {currentSubcategories.length > 0 && (
-              <Field label="Subcategoría">
-                <div style={{ position: 'relative' }}>
-                  <select value={formData.subcategory} onChange={e => set('subcategory', e.target.value)} style={selectStyle}>
-                    <option value="">(Sin subcategoría)</option>
-                    {currentSubcategories.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                </div>
-              </Field>
-            )}
-          </div>
-
-          {/* Comentarios */}
-          <Field label="Comentarios" optional>
-            <textarea
-              placeholder="Opcional · contexto, recordatorios…"
-              rows={2}
-              value={formData.comments}
-              onChange={e => set('comments', e.target.value)}
-              style={{
-                ...inputStyle, resize: 'none',
-                lineHeight: 1.5,
-              }}
-            />
-          </Field>
-
-          {/* Submit */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
-            <button
-              type="submit"
-              style={{
-                padding: '14px 16px', border: 'none', cursor: 'pointer',
-                background: 'var(--clay-500)', color: '#fff', borderRadius: 14,
-                fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 14,
-                boxShadow: 'var(--shadow-clay)', letterSpacing: '-0.01em',
-                transition: 'background var(--dur-fast) var(--ease-out)',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--clay-600)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'var(--clay-500)'}
-            >
-              {isNew ? `Registrar ${mode === 'transfer' ? 'transferencia' : 'transacción'}` : 'Guardar cambios'}
-            </button>
-            {!isNew && (
-              <button
-                type="button"
-                onClick={() => setConfirmDeleteOpen(true)}
-                style={{
-                  padding: '12px 16px', border: 'none', cursor: 'pointer',
-                  background: 'var(--danger-50)', color: 'var(--danger-700)', borderRadius: 14,
-                  fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 13,
-                }}
-              >
-                Eliminar transacción
+              <button type="button" onClick={onClose} style={{
+                width: 38, height: 38, borderRadius: 12, border: 'none',
+                background: 'var(--bg-sunken)', color: 'var(--fg-2)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Icon name="close" size={20} />
               </button>
-            )}
-          </div>
-        </form>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--fg-1)' }}>{title}</div>
+              <button type="submit" style={{
+                background: 'transparent', border: 'none', color: 'var(--clay-600)',
+                fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                padding: '8px 4px',
+              }}>
+                Guardar
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div style={{
+              flex: 1, minHeight: 0, overflowY: 'auto',
+              padding: '0 16px 28px', display: 'flex', flexDirection: 'column', gap: 16,
+            }}>
+
+              {/* Type selector */}
+              {mode === 'transaction' && (
+                <Segmented
+                  value={formData.type}
+                  onChange={v => set('type', v)}
+                  size="md"
+                  options={[
+                    { value: 'debit',  label: 'Gasto' },
+                    { value: 'credit', label: 'Ingreso' },
+                  ]}
+                />
+              )}
+
+              {/* Amount card */}
+              <div style={{
+                background: 'var(--bg-raised)', borderRadius: 22, padding: 18,
+                boxShadow: 'var(--shadow-sm)',
+              }}>
+                <Eyebrow>Monto</Eyebrow>
+                <div style={{ marginTop: 6, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ fontSize: 26, color: 'var(--fg-3)', fontWeight: 500 }}>$</span>
+                  <input
+                    required type="number" step="0.01" placeholder="0"
+                    value={formData.amount}
+                    onChange={e => set('amount', e.target.value)}
+                    style={{
+                      flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent',
+                      fontSize: 40, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.03em',
+                      fontFamily: 'var(--font-sans)', fontVariantNumeric: 'tabular-nums', padding: 0,
+                    }}
+                  />
+                  <select
+                    value={formData.currency}
+                    onChange={e => set('currency', e.target.value)}
+                    style={{
+                      flexShrink: 0, padding: '5px 9px', borderRadius: 8, background: 'var(--bg-sunken)',
+                      border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 800,
+                      color: 'var(--fg-2)', fontFamily: 'var(--font-mono)',
+                      appearance: 'none', WebkitAppearance: 'none',
+                    }}
+                  >
+                    {(appConfig?.currencies || ['COP', 'USD']).map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Concepto */}
+              <div>
+                <FieldLabel>Descripción</FieldLabel>
+                <div style={{
+                  background: 'var(--bg-raised)', borderRadius: 14,
+                  border: '1px solid var(--border-default)',
+                  padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <Icon name="title" size={18} color="var(--fg-3)" />
+                  <input
+                    required type="text"
+                    placeholder={mode === 'transfer' ? 'Ej. Transferencia mensual' : 'Ej. Almuerzo'}
+                    value={formData.title}
+                    onChange={e => set('title', e.target.value)}
+                    style={{
+                      flex: 1, border: 'none', background: 'transparent', outline: 'none',
+                      fontSize: 14, fontFamily: 'var(--font-sans)', color: 'var(--fg-1)', fontWeight: 600,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Category chips */}
+              <div>
+                <FieldLabel>Categoría</FieldLabel>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {filteredCategories.length === 0 ? (
+                    <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>No hay categorías para este tipo/contexto.</span>
+                  ) : filteredCategories.map(c => {
+                    const active = c.name === formData.category;
+                    return (
+                      <button
+                        key={c.name}
+                        type="button"
+                        onClick={() => { set('category', c.name); set('subcategory', ''); }}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          padding: '7px 11px', borderRadius: 9999,
+                          background: active ? 'var(--clay-500)' : 'var(--bg-raised)',
+                          color: active ? '#fff' : 'var(--fg-1)',
+                          border: active ? 'none' : '1px solid var(--border-default)',
+                          fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                        }}
+                      >
+                        <Icon name={c.icon || 'category'} size={14} />
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Subcategory */}
+              {currentSubcategories.length > 0 && (
+                <div>
+                  <FieldLabel>Subcategoría</FieldLabel>
+                  <div style={{ position: 'relative' }}>
+                    <select value={formData.subcategory} onChange={e => set('subcategory', e.target.value)} style={selectStyle}>
+                      <option value="">(Sin subcategoría)</option>
+                      {currentSubcategories.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Account + Date */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <FieldLabel>{mode === 'transfer' ? 'Cuenta origen' : 'Cuenta'}</FieldLabel>
+                  <div style={{ position: 'relative' }}>
+                    <select required value={formData.card} onChange={e => set('card', e.target.value)} style={selectStyle}>
+                      <option value="" disabled>Seleccionar…</option>
+                      {(appConfig?.accounts || []).map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                    <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  </div>
+                </div>
+                <div>
+                  <FieldLabel>Fecha</FieldLabel>
+                  <input type="date" value={formData.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+                </div>
+              </div>
+
+              {/* Context + (transfer) destination */}
+              <div style={{ display: 'grid', gridTemplateColumns: mode === 'transfer' ? '1fr 1fr' : '1fr', gap: 10 }}>
+                <div>
+                  <FieldLabel>{mode === 'transfer' ? 'Contexto origen' : 'Contexto'}</FieldLabel>
+                  <div style={{ position: 'relative' }}>
+                    <select value={formData.context} onChange={e => set('context', e.target.value)} style={selectStyle}>
+                      <option value="personal">Personal</option>
+                      <option value="business">Negocio</option>
+                    </select>
+                    <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  </div>
+                </div>
+                {mode === 'transfer' && (
+                  <div>
+                    <FieldLabel>Contexto destino</FieldLabel>
+                    <div style={{ position: 'relative' }}>
+                      <select value={formData.destinationContext} onChange={e => set('destinationContext', e.target.value)} style={selectStyle}>
+                        <option value="personal">Personal</option>
+                        <option value="business">Negocio</option>
+                      </select>
+                      <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Transfer destination account */}
+              {mode === 'transfer' && (
+                <div>
+                  <FieldLabel>Cuenta destino</FieldLabel>
+                  <div style={{ position: 'relative' }}>
+                    <select required value={formData.destinationCard} onChange={e => set('destinationCard', e.target.value)} style={selectStyle}>
+                      <option value="" disabled>Seleccionar…</option>
+                      {(appConfig?.accounts || []).map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                    <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  </div>
+                </div>
+              )}
+
+              {/* Comentarios */}
+              <div>
+                <FieldLabel>Nota · opcional</FieldLabel>
+                <textarea
+                  placeholder="Contexto, recordatorios…"
+                  rows={2}
+                  value={formData.comments}
+                  onChange={e => set('comments', e.target.value)}
+                  style={{ ...inputStyle, resize: 'none', lineHeight: 1.5 }}
+                />
+              </div>
+
+              {/* Submit + delete */}
+              <button
+                type="submit"
+                style={{
+                  marginTop: 4, padding: '14px 16px', border: 'none', cursor: 'pointer',
+                  background: 'var(--clay-500)', color: '#fff', borderRadius: 14,
+                  fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 14,
+                  boxShadow: 'var(--shadow-clay)',
+                }}
+              >
+                {isNew ? `Registrar ${mode === 'transfer' ? 'transferencia' : 'transacción'}` : 'Guardar cambios'}
+              </button>
+              {!isNew && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  style={{
+                    padding: '12px 16px', border: 'none', cursor: 'pointer',
+                    background: 'var(--danger-50)', color: 'var(--danger-700)', borderRadius: 14,
+                    fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 13,
+                  }}
+                >
+                  Eliminar transacción
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
       </div>
 
       <ConfirmModal

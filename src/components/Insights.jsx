@@ -1,195 +1,149 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { formatCurrency } from '../utils/format';
-import TransactionModal from './TransactionModal';
-import ConfirmModal from './ConfirmModal';
+import { formatCurrency, formatCompactNumber } from '../utils/format';
 import {
-  Icon, Card, Pill, DeltaPill, IconTile, SparkLine, ProgressBar,
-  Eyebrow, Money, hueForCategory, hueColorVar,
+  Icon, Card, Pill, Eyebrow, Editorial, SectionHeader, BarChart,
 } from './ds/Primitives';
 
 const EXCHANGE_RATE = 4100;
+const DAY_MS = 86400000;
 
-// Section heading used throughout
-const SectionHead = ({ title, action }) => (
-  <div style={{
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '20px 0 8px',
-  }}>
-    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.01em' }}>
-      {title}
-    </h3>
-    {action}
-  </div>
-);
-
-// Single transaction row
-const TxRow = ({ tx, onClick, onDelete }) => {
-  const isTransfer = tx.type === 'transfer' || tx.isTransfer;
-  const amountColor = isTransfer ? 'var(--plum-400)' : tx.type === 'credit' ? 'var(--success-700)' : 'var(--fg-1)';
-  const sign = isTransfer ? '' : tx.type === 'credit' ? '+' : '−';
-
-  const cat = tx.category || 'general';
-  const hue = hueForCategory(cat);
-
-  const iconName = (() => {
-    if (isTransfer) return 'swap_horiz';
-    if (tx.type === 'credit') return 'trending_up';
-    const map = { food: 'restaurant', software: 'code', services: 'home_repair_service', salud: 'medical_services', transporte: 'directions_car' };
-    return map[cat] || 'payments';
-  })();
-
-  let dateStr = '';
-  try {
-    const d = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
-    dateStr = d.toLocaleDateString('es-CO', { month: 'short', day: 'numeric' });
-  } catch { /* ignore */ }
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px',
-        borderRadius: 12, cursor: 'pointer',
-        transition: 'background var(--dur-fast) var(--ease-out)',
-      }}
-      onMouseEnter={e => e.currentTarget.style.background = 'var(--ink-50)'}
-      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-    >
-      <IconTile icon={iconName} hue={hue} size={38} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {tx.title}
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--fg-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2 }}>
-          {tx.context === 'business' ? 'Negocio' : 'Personal'}
-          {tx.card && ` · ${tx.card}`}
-          {dateStr && ` · ${dateStr}`}
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: amountColor, whiteSpace: 'nowrap' }}>
-          {sign}{formatCurrency(Math.abs(tx.amount), tx.currency || 'COP')}
-        </div>
-        {onDelete && (
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onDelete(tx.id); }}
-            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--fg-4)', padding: 2, borderRadius: 6 }}
-            onMouseEnter={e => e.currentTarget.style.color = 'var(--danger-700)'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--fg-4)'}
-          >
-            <Icon name="delete" size={14} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
+const isTransferTx = (t) => t.type === 'transfer' || t.isTransfer === true;
+const toCOP = (t) => (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount);
+const txDate = (t) => (t.date?.toDate ? t.date.toDate() : new Date(t.date));
+const midnight = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
 
 export default function Insights({ currentContext, onNavigate }) {
-  const { transactions, getTotals, deleteTransaction, loading } = useFinance();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState(null);
-  const [modalMode, setModalMode] = useState('transaction');
-  const [confirmDelete, setConfirmDelete] = useState({ isOpen: false, txId: null });
+  const { transactions, loading } = useFinance();
 
-  const isTransferTx = (t) => t.type === 'transfer' || t.isTransfer === true;
-
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(t => {
+  const filtered = useMemo(() => (
+    transactions.filter(t => {
       if (currentContext === 'unified') return true;
       if (isTransferTx(t)) return t.context === currentContext || t.destinationContext === currentContext;
       return t.context === currentContext;
-    });
-  }, [transactions, currentContext]);
+    })
+  ), [transactions, currentContext]);
 
   const today = useMemo(() => new Date(), []);
-  const currentMonth = today.getMonth();
-  const currentYear = today.getFullYear();
-  const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-  const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+  const month = today.getMonth();
+  const year = today.getFullYear();
+  const prevMonth = month === 0 ? 11 : month - 1;
+  const prevMonthYear = month === 0 ? year - 1 : year;
 
-  const savingsRate = useMemo(() => {
-    const txs = filteredTransactions.filter(t => {
-      const d = t.date?.toDate ? t.date.toDate() : new Date(t.date);
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear && !isTransferTx(t);
+  // 30-day daily spending series (expenses only)
+  const daily = useMemo(() => {
+    const arr = new Array(30).fill(0);
+    const start = midnight(today);
+    start.setDate(start.getDate() - 29);
+    filtered.forEach(t => {
+      if (t.type !== 'debit' || isTransferTx(t)) return;
+      const idx = Math.floor((midnight(txDate(t)) - start) / DAY_MS);
+      if (idx >= 0 && idx < 30) arr[idx] += toCOP(t);
     });
-    const income   = txs.filter(t => t.type === 'credit').reduce((a, t) => a + (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount), 0);
-    const expenses = txs.filter(t => t.type === 'debit').reduce((a, t)  => a + (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount), 0);
-    return income === 0 ? 0 : ((income - expenses) / income) * 100;
-  }, [filteredTransactions, currentMonth, currentYear]);
+    return arr;
+  }, [filtered, today]);
 
-  const prevSavingsRate = useMemo(() => {
-    const txs = filteredTransactions.filter(t => {
-      const d = t.date?.toDate ? t.date.toDate() : new Date(t.date);
-      return d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear && !isTransferTx(t);
+  const todayTotal = daily[29];
+  const todayCount = useMemo(() => (
+    filtered.filter(t => t.type === 'debit' && !isTransferTx(t) &&
+      midnight(txDate(t)).getTime() === midnight(today).getTime()).length
+  ), [filtered, today]);
+  const dailyAvg = daily.reduce((a, b) => a + b, 0) / 30;
+  const last7 = daily.slice(-7);
+
+  // Month aggregates
+  const monthAgg = useMemo(() => {
+    const inMonth = (d) => d.getMonth() === month && d.getFullYear() === year;
+    const inPrev = (d) => d.getMonth() === prevMonth && d.getFullYear() === prevMonthYear;
+    let spent = 0, income = 0, prevSpent = 0, prevIncome = 0;
+    filtered.forEach(t => {
+      if (isTransferTx(t)) return;
+      const d = txDate(t), amt = toCOP(t);
+      if (inMonth(d)) {
+        if (t.type === 'debit') spent += amt;
+        if (t.type === 'credit') income += amt;
+      } else if (inPrev(d)) {
+        if (t.type === 'debit') prevSpent += amt;
+        if (t.type === 'credit') prevIncome += amt;
+      }
     });
-    const income   = txs.filter(t => t.type === 'credit').reduce((a, t) => a + (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount), 0);
-    const expenses = txs.filter(t => t.type === 'debit').reduce((a, t)  => a + (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount), 0);
-    return income === 0 ? 0 : ((income - expenses) / income) * 100;
-  }, [filteredTransactions, lastMonth, lastMonthYear]);
+    const savings = income > 0 ? ((income - spent) / income) * 100 : 0;
+    const prevSavings = prevIncome > 0 ? ((prevIncome - prevSpent) / prevIncome) * 100 : 0;
+    return {
+      spent, income, savings, prevSavings,
+      spentDelta: prevSpent > 0 ? ((spent - prevSpent) / prevSpent) * 100 : 0,
+      incomeDelta: prevIncome > 0 ? ((income - prevIncome) / prevIncome) * 100 : 0,
+    };
+  }, [filtered, month, year, prevMonth, prevMonthYear]);
 
-  const savingsRateTrend = savingsRate - prevSavingsRate;
+  // Registration streak (consecutive days with at least one transaction)
+  const streak = useMemo(() => {
+    const days = new Set(filtered.map(t => midnight(txDate(t)).getTime()));
+    let count = 0;
+    const cursor = midnight(today);
+    if (!days.has(cursor.getTime())) cursor.setDate(cursor.getDate() - 1);
+    while (days.has(cursor.getTime())) { count++; cursor.setDate(cursor.getDate() - 1); }
+    return count;
+  }, [filtered, today]);
 
-  const categoryBreakdown = useMemo(() => {
-    const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 2, 1);
-    const txs = filteredTransactions.filter(t => {
-      const d = t.date?.toDate ? t.date.toDate() : new Date(t.date);
-      return d >= threeMonthsAgo && t.type === 'debit' && !isTransferTx(t);
+  // Smart insights derived from real data
+  const insights = useMemo(() => {
+    const list = [];
+    const monthTxs = filtered.filter(t => {
+      const d = txDate(t);
+      return d.getMonth() === month && d.getFullYear() === year && t.type === 'debit' && !isTransferTx(t);
     });
+
+    // Top expense category this month
     const cats = {};
-    let total = 0;
-    txs.forEach(t => {
-      const amt = t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount;
-      const cat = t.category || 'general';
-      cats[cat] = (cats[cat] || 0) + amt;
-      total += amt;
-    });
-    return Object.entries(cats)
-      .sort(([, a], [, b]) => b - a)
-      .map(([name, amount]) => ({ name, amount, pct: total > 0 ? (amount / total) * 100 : 0 }));
-  }, [filteredTransactions, today]);
-
-  const topFugas = useMemo(() => {
-    const threeMonthsAgo    = new Date(today.getFullYear(), today.getMonth() - 2, 1);
-    const prevThreeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 5, 1);
-    const txs = filteredTransactions.filter(t => {
-      const d = t.date?.toDate ? t.date.toDate() : new Date(t.date);
-      return d >= threeMonthsAgo && t.type === 'debit' && !isTransferTx(t);
-    });
-    const groups = {};
-    txs.forEach(t => {
-      const amt = t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount;
-      const title = t.title || 'Sin Nombre';
-      groups[title] = (groups[title] || 0) + amt;
-    });
-    return Object.entries(groups)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([name, amount]) => {
-        const prev = filteredTransactions
-          .filter(t => {
-            const d = t.date?.toDate ? t.date.toDate() : new Date(t.date);
-            return d >= prevThreeMonthsAgo && d < threeMonthsAgo && t.type === 'debit' && t.title === name;
-          })
-          .reduce((a, t) => a + (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount), 0);
-        const trend = prev > 0 ? ((amount - prev) / prev) * 100 : amount > 0 ? 100 : 0;
-        return { name, amount, trend };
+    monthTxs.forEach(t => { const c = t.category || 'general'; cats[c] = (cats[c] || 0) + toCOP(t); });
+    const topCat = Object.entries(cats).sort(([, a], [, b]) => b - a)[0];
+    if (topCat && monthAgg.spent > 0) {
+      list.push({
+        tone: 'var(--clay-500)', icon: 'local_fire_department', fill: true,
+        titleColor: 'var(--clay-700)',
+        title: `Tu mayor gasto va para ${topCat[0]}`,
+        body: `${Math.round((topCat[1] / monthAgg.spent) * 100)}% del mes — ${formatCurrency(topCat[1], 'COP')}.`,
+        onClick: () => onNavigate && onNavigate('categoria', { category: topCat[0] }),
       });
-  }, [filteredTransactions, today]);
+    }
 
-  const { netWorth, personalBalance, businessCashFlow } = getTotals(currentContext);
+    // Savings vs last month
+    if (monthAgg.income > 0) {
+      const up = monthAgg.savings >= monthAgg.prevSavings;
+      list.push({
+        tone: up ? 'var(--olive-500)' : 'var(--amber-300)',
+        icon: up ? 'trending_up' : 'trending_down',
+        titleColor: up ? 'var(--olive-600)' : 'var(--ink-700)',
+        title: up ? 'Vas ahorrando bien este mes' : 'Tu ahorro bajó frente al mes pasado',
+        body: `Tasa de ahorro ${monthAgg.savings.toFixed(0)}% · mes anterior ${monthAgg.prevSavings.toFixed(0)}%.`,
+      });
+    }
 
-  const balanceConfig = {
-    personal: { title: 'Balance personal',  data: personalBalance,   hue: 'var(--clay-500)',  iconHue: 'clay',  icon: 'person' },
-    business: { title: 'Caja del negocio',  data: businessCashFlow,  hue: 'var(--plum-400)',  iconHue: 'plum',  icon: 'business_center' },
-    unified:  { title: 'Patrimonio neto',   data: netWorth,          hue: 'var(--ink-700)',   iconHue: 'ink',   icon: 'donut_small' },
-  }[currentContext];
+    // Biggest single expense in last 30 days
+    const recent = filtered.filter(t => {
+      if (t.type !== 'debit' || isTransferTx(t)) return false;
+      return (midnight(today) - midnight(txDate(t))) / DAY_MS < 30;
+    });
+    const biggest = recent.sort((a, b) => toCOP(b) - toCOP(a))[0];
+    if (biggest) {
+      list.push({
+        tone: 'var(--amber-300)', icon: 'schedule', titleColor: 'var(--ink-700)',
+        title: `Tu mayor fuga: ${biggest.title}`,
+        body: `${formatCurrency(toCOP(biggest), 'COP')} · ${txDate(biggest).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}.`,
+      });
+    }
+    return list;
+  }, [filtered, month, year, monthAgg, today, onNavigate]);
 
-  const primaryCurrency = Object.keys(balanceConfig.data).find(k => balanceConfig.data[k] !== 0) || 'COP';
-  const primaryValue    = balanceConfig.data[primaryCurrency] || 0;
-  const secondaryCurrencies = Object.keys(balanceConfig.data).filter(k => k !== primaryCurrency && balanceConfig.data[k] !== 0);
+  const labels7 = useMemo(() => {
+    const out = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      out.push(['D', 'L', 'M', 'M', 'J', 'V', 'S'][d.getDay()]);
+    }
+    return out;
+  }, [today]);
 
   if (loading) {
     return (
@@ -201,185 +155,147 @@ export default function Insights({ currentContext, onNavigate }) {
     );
   }
 
+  const week7Total = last7.reduce((a, b) => a + b, 0);
+
   return (
-    <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto', padding: '0 20px', paddingBottom: 24 }} className="animate-fade-up">
-
-      {/* Page header */}
-      <div style={{ padding: '16px 0 8px' }}>
+    <div
+      className="animate-fade-up"
+      style={{ maxWidth: 1000, margin: '0 auto', padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
+      {/* Greeting */}
+      <div>
         <Eyebrow style={{ marginBottom: 6 }}>
-          {today.toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          {today.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
         </Eyebrow>
-        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
-          Radiografía financiera
-        </h1>
-        <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--fg-3)', lineHeight: 1.4 }}>
-          Deja de adivinar a dónde se va la plata.
-        </p>
+        <Editorial size={26}>
+          {streak > 0
+            ? <>Llevas <span style={{ color: 'var(--clay-500)' }}>{streak} {streak === 1 ? 'día' : 'días'}</span> registrando.</>
+            : <>Tu <span style={{ color: 'var(--clay-500)' }}>radiografía</span> financiera.</>}
+        </Editorial>
       </div>
 
-      {/* Top grid: balance + savings rate */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 12, marginBottom: 12 }}
-        className="grid-cols-1 sm:grid-cols-[1.5fr_1fr]"
-      >
-        {/* Main balance card */}
-        <Card moduleHue={balanceConfig.hue} style={{ gridColumn: 'span 1' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <Eyebrow>{balanceConfig.title}</Eyebrow>
-              <div style={{ marginTop: 8 }}>
-                <Money amount={primaryValue} currency={primaryCurrency} size="xl" />
-              </div>
-              {secondaryCurrencies.length > 0 && (
-                <div style={{ marginTop: 5, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  {secondaryCurrencies.map(cur => {
-                    const val = balanceConfig.data[cur];
-                    return (
-                      <span key={cur} style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>
-                        {val >= 0 ? '+' : '−'} {formatCurrency(Math.abs(val), cur)} {cur}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <IconTile icon={balanceConfig.icon} hue={balanceConfig.iconHue} size={36} />
-          </div>
-          <SparkLine color={balanceConfig.hue} points={[28, 18, 24, 12, 18, 8, 14, 5]} />
-        </Card>
+      {/* Hero — daily pulse */}
+      <Card padding={20} style={{ background: 'var(--ink-800)', color: '#fff', borderRadius: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Eyebrow style={{ color: 'rgba(255,255,255,0.55)' }}>
+            Hoy · {today.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+          </Eyebrow>
+          <Pill variant="clay" icon="bolt">En vivo</Pill>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 38, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+          {todayTotal > 0 ? '−' : ''}{formatCurrency(todayTotal, 'COP')}
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>
+          {todayCount} {todayCount === 1 ? 'movimiento' : 'movimientos'} · promedio diario {formatCurrency(Math.round(dailyAvg), 'COP')}
+        </div>
 
-        {/* Savings rate card */}
-        <Card padding={14}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-            <Eyebrow>Tasa de ahorro</Eyebrow>
-            <IconTile icon="trending_up" hue="success" size={28} />
+        {/* 30-day pulse bars */}
+        <div style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 64 }}>
+            {daily.map((v, i) => {
+              const max = Math.max(...daily, 1);
+              const h = Math.max(2, (v / max) * 64);
+              const isToday = i === 29;
+              const dow = new Date(today.getTime() - (29 - i) * DAY_MS).getDay();
+              const weekend = dow === 0 || dow === 6;
+              return (
+                <div key={i} style={{
+                  flex: 1, height: h, borderRadius: 2,
+                  background: isToday ? 'var(--clay-500)'
+                    : weekend ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.14)',
+                }} />
+              );
+            })}
           </div>
-          <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-            {savingsRate.toFixed(1)}<span style={{ fontSize: 16, color: 'var(--fg-3)' }}>%</span>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', marginTop: 6,
+            fontSize: 9, color: 'rgba(255,255,255,0.4)', fontWeight: 700,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+          }}>
+            <span>Hace 30 días</span>
+            <span>Hoy</span>
           </div>
-          <div style={{ marginTop: 10 }}>
-            <DeltaPill value={savingsRateTrend} />
-            <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--fg-3)' }}>vs mes pasado</span>
-          </div>
-        </Card>
-      </div>
-
-      {/* Actividad reciente */}
-      <SectionHead
-        title="Actividad reciente"
-        action={
-          <button
-            type="button"
-            onClick={() => onNavigate && onNavigate('transactions')}
-            style={{ background: 'none', border: 'none', color: 'var(--clay-600)', fontWeight: 700, fontSize: 11, cursor: 'pointer', letterSpacing: '0.08em', textTransform: 'uppercase' }}
-          >
-            Ver todo →
-          </button>
-        }
-      />
-
-      <Card padding={6} style={{ marginBottom: 12 }}>
-        {filteredTransactions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '28px 20px', color: 'var(--fg-3)' }}>
-            <IconTile icon="receipt_long" hue="ink" size={48} />
-            <div style={{ marginTop: 10, fontSize: 14, fontWeight: 700, color: 'var(--fg-2)' }}>No hay transacciones registradas.</div>
-          </div>
-        ) : (
-          filteredTransactions.slice(0, 6).map(tx => (
-            <TxRow
-              key={tx.id}
-              tx={tx}
-              onClick={() => { setEditingTransaction(tx); setModalMode('transaction'); setIsModalOpen(true); }}
-              onDelete={(id) => setConfirmDelete({ isOpen: true, txId: id })}
-            />
-          ))
-        )}
+        </div>
       </Card>
 
-      {/* Gastos por categoría */}
-      {categoryBreakdown.length > 0 && (
-        <>
-          <SectionHead title="Gastos por categoría" />
-          <Card padding={16} style={{ marginBottom: 12 }}>
-            <p style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--fg-3)' }}>Últimos 3 meses</p>
-            {/* Stacked bar */}
-            <div style={{ display: 'flex', height: 10, borderRadius: 9999, overflow: 'hidden', marginBottom: 14 }}>
-              {categoryBreakdown.map(b => (
-                <div
-                  key={b.name}
-                  style={{ width: `${b.pct}%`, background: hueColorVar(hueForCategory(b.name)) }}
-                  title={`${b.name}: ${b.pct.toFixed(0)}%`}
-                />
-              ))}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {categoryBreakdown.slice(0, 6).map(b => (
-                <div key={b.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--fg-2)' }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 9999, background: hueColorVar(hueForCategory(b.name)), flexShrink: 0 }} />
-                    {b.name}
-                  </span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg-1)' }}>
-                    {b.pct.toFixed(0)}%
-                  </span>
+      {/* Quick stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        {[
+          { label: 'Mes', value: `$ ${formatCompactNumber(monthAgg.spent)}`, delta: monthAgg.spentDelta, invert: true },
+          { label: 'Ingresos', value: `$ ${formatCompactNumber(monthAgg.income)}`, delta: monthAgg.incomeDelta, invert: false },
+          { label: 'Ahorro', value: `${monthAgg.savings.toFixed(0)}%`, delta: monthAgg.savings - monthAgg.prevSavings, invert: false, pp: true },
+        ].map(s => {
+          const good = s.invert ? s.delta <= 0 : s.delta >= 0;
+          return (
+            <Card key={s.label} padding={12}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--fg-3)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                {s.label}
+              </div>
+              <div style={{ marginTop: 4, fontSize: 16, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em' }}>
+                {s.value}
+              </div>
+              <div style={{ fontSize: 10, color: good ? 'var(--olive-600)' : 'var(--danger-700)', fontWeight: 700, marginTop: 2 }}>
+                {s.delta >= 0 ? '↑' : '↓'} {Math.abs(s.delta).toFixed(0)}{s.pp ? 'pp' : '%'}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Lower section — insights + weekly pulse */}
+      <div className="grid gap-3 md:grid-cols-2 md:items-start" style={{ display: 'grid' }}>
+        {/* Smart insights */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <SectionHeader title="Te conviene saber" eyebrow="Detectado por Mis Finanzas" />
+          {insights.length === 0 ? (
+            <Card padding={16}>
+              <div style={{ fontSize: 13, color: 'var(--fg-3)', textAlign: 'center' }}>
+                Registra movimientos para ver tu análisis.
+              </div>
+            </Card>
+          ) : insights.map((ins, i) => (
+            <Card
+              key={i} padding={14}
+              onClick={ins.onClick}
+              style={{ borderLeft: `4px solid ${ins.tone}` }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <Icon name={ins.icon} size={22} fill={ins.fill} color={ins.tone} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: ins.titleColor }}>{ins.title}</div>
+                  <div style={{ marginTop: 3, fontSize: 12, color: 'var(--ink-600)', lineHeight: 1.5 }}>{ins.body}</div>
                 </div>
-              ))}
+                {ins.onClick ? <Icon name="chevron_right" size={18} color="var(--fg-3)" /> : null}
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        {/* Weekly pulse */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <SectionHeader title="Pulso semanal" eyebrow="Últimos 7 días" />
+          <Card padding={16}>
+            <BarChart data={last7} height={84} color="var(--clay-500)" highlightIdx={6} labels={labels7} />
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', marginTop: 14,
+              paddingTop: 12, borderTop: '1px dashed var(--border-default)',
+            }}>
+              <div>
+                <Eyebrow>Total semana</Eyebrow>
+                <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: 'var(--fg-1)' }}>
+                  −{formatCurrency(week7Total, 'COP')}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <Eyebrow>Promedio diario</Eyebrow>
+                <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: 'var(--fg-1)' }}>
+                  −{formatCurrency(Math.round(week7Total / 7), 'COP')}
+                </div>
+              </div>
             </div>
           </Card>
-        </>
-      )}
-
-      {/* Mayores fugas */}
-      {topFugas.length > 0 && (
-        <>
-          <SectionHead title="Mayores fugas" />
-          <Card padding={16} style={{ marginBottom: 12 }}>
-            <p style={{ margin: '0 0 12px', fontSize: 11, color: 'var(--fg-3)' }}>Top gastos individuales, últimos 3 meses.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {topFugas.map((f, i) => (
-                <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '10px 0',
-                  borderBottom: i < topFugas.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                }}>
-                  <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {f.name}
-                    </div>
-                    <Pill
-                      variant={f.trend > 0 ? 'danger' : 'success'}
-                      icon={f.trend > 0 ? 'north_east' : 'south_east'}
-                      style={{ marginTop: 4 }}
-                    >
-                      {f.trend > 0 ? '+' : ''}{f.trend.toFixed(0)}%
-                    </Pill>
-                  </div>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg-1)', fontSize: 13 }}>
-                    {formatCurrency(f.amount, 'COP')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </>
-      )}
-
-      <TransactionModal
-        isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setEditingTransaction(null); }}
-        editingTransaction={editingTransaction}
-        initialMode={modalMode}
-      />
-
-      <ConfirmModal
-        isOpen={confirmDelete.isOpen}
-        onClose={() => setConfirmDelete({ isOpen: false, txId: null })}
-        onConfirm={() => { if (confirmDelete.txId) deleteTransaction(confirmDelete.txId); }}
-        title="Eliminar transacción"
-        message="¿Estás seguro de que deseas eliminar esta transacción? Esta acción no se puede deshacer."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        isDestructive
-      />
+        </div>
+      </div>
     </div>
   );
 }

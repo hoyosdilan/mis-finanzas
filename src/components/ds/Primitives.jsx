@@ -317,6 +317,154 @@ export const SelectInput = ({ value, onChange, options }) => (
 );
 
 // ---------------------------------------------------------------------------
+// Editorial — Newsreader italic display moment
+// ---------------------------------------------------------------------------
+export const Editorial = ({ children, size = 28, color = 'var(--fg-1)', style = {} }) => (
+  <div style={{
+    fontFamily: 'var(--font-display)', fontStyle: 'italic', fontWeight: 500,
+    fontSize: size, lineHeight: 1.05, letterSpacing: '-0.02em', color,
+    ...style,
+  }}>
+    {children}
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// SectionHeader — eyebrow + title + optional action
+// ---------------------------------------------------------------------------
+export const SectionHeader = ({ title, eyebrow, action, onAction }) => (
+  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+    <div>
+      {eyebrow ? <Eyebrow style={{ marginBottom: 4 }}>{eyebrow}</Eyebrow> : null}
+      <div style={{
+        fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 17,
+        color: 'var(--fg-1)', letterSpacing: '-0.01em',
+      }}>
+        {title}
+      </div>
+    </div>
+    {action ? (
+      <button
+        type="button"
+        onClick={onAction}
+        style={{
+          background: 'transparent', border: 'none', cursor: onAction ? 'pointer' : 'default',
+          color: 'var(--clay-600)', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-sans)',
+          display: 'inline-flex', alignItems: 'center', gap: 2, padding: 0, flexShrink: 0,
+        }}
+      >
+        {action}<Icon name="chevron_right" size={16} />
+      </button>
+    ) : null}
+  </div>
+);
+
+// ---------------------------------------------------------------------------
+// IconBtn — square icon button
+// ---------------------------------------------------------------------------
+export const IconBtn = ({ icon, onClick, tone = 'ghost', size = 38, badge = false, fill = false, title, style = {} }) => {
+  const tones = {
+    ghost:    { bg: 'transparent',              fg: 'var(--fg-2)' },
+    sunken:   { bg: 'var(--bg-sunken)',         fg: 'var(--fg-1)' },
+    clay:     { bg: 'var(--clay-500)',          fg: '#fff' },
+    glass:    { bg: 'rgba(255,255,255,0.12)',   fg: '#fff' },
+  };
+  const t = tones[tone] || tones.ghost;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      style={{
+        width: size, height: size, borderRadius: size >= 40 ? 12 : 10,
+        background: t.bg, color: t.fg, border: 'none', cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative', flexShrink: 0,
+        transition: 'background var(--dur-fast) var(--ease-out)',
+        ...style,
+      }}
+    >
+      <Icon name={icon} size={Math.round(size * 0.55)} fill={fill} />
+      {badge ? (
+        <span style={{
+          position: 'absolute', top: 6, right: 6, width: 7, height: 7, borderRadius: '50%',
+          background: 'var(--clay-500)', border: '2px solid var(--bg-canvas)',
+        }} />
+      ) : null}
+    </button>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Donut — multi-segment ring chart
+// ---------------------------------------------------------------------------
+export const Donut = ({ segments = [], size = 160, thickness = 22, gap = 0.015, children }) => {
+  const r = size / 2 - thickness / 2;
+  const c = 2 * Math.PI * r;
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--bg-sunken)" strokeWidth={thickness} />
+        {segments.map((seg, i) => {
+          const frac = seg.value / total;
+          const before = segments.slice(0, i).reduce((s, x) => s + x.value, 0) / total;
+          const len = Math.max(0, frac * c - gap * c);
+          const off = before * c + (gap * c) / 2;
+          return (
+            <circle
+              key={i} cx={size / 2} cy={size / 2} r={r} fill="none"
+              stroke={seg.color} strokeWidth={thickness}
+              strokeDasharray={`${len} ${c}`} strokeDashoffset={-off}
+            />
+          );
+        })}
+      </svg>
+      {children ? (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+        }}>
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// BarChart — vertical bars with optional highlight + labels
+// ---------------------------------------------------------------------------
+export const BarChart = ({
+  data = [], height = 80, color = 'var(--clay-500)',
+  highlightIdx, labels, trackColor = 'var(--parchment-200)',
+}) => {
+  const max = Math.max(...data, 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height, width: '100%' }}>
+      {data.map((v, i) => {
+        const h = (v / max) * (height - (labels ? 16 : 0));
+        const isHi = i === highlightIdx;
+        return (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <div style={{
+              width: '100%', height: Math.max(2, h), borderRadius: 4,
+              background: isHi ? color : trackColor, alignSelf: 'flex-end',
+              transition: 'height var(--dur-slow) var(--ease-out)',
+            }} />
+            {labels ? (
+              <span style={{ fontSize: 9, color: isHi ? 'var(--fg-1)' : 'var(--fg-3)', fontWeight: isHi ? 800 : 600 }}>
+                {labels[i]}
+              </span>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Category hue map (single source of truth)
 // ---------------------------------------------------------------------------
 export const HUE_BY_CATEGORY = {
