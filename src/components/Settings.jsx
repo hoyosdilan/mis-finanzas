@@ -1,8 +1,27 @@
 import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
+import { Icon } from './ds/Primitives';
 import ConfirmModal from './ConfirmModal';
 
-// Helper component for rendering list sections (Currencies, Accounts)
+const INPUT_STYLE = {
+    flex: 1, padding: '9px 12px',
+    background: 'var(--bg-sunken)',
+    border: '1px solid var(--border-default)',
+    borderRadius: 'var(--r-lg)',
+    fontFamily: 'var(--font-sans)', fontSize: 13,
+    color: 'var(--fg-1)', outline: 'none',
+    boxSizing: 'border-box',
+};
+
+const ICON_BTN = (extra = {}) => ({
+    width: 32, height: 32,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    borderRadius: 8, border: 'none', cursor: 'pointer',
+    background: 'transparent', flexShrink: 0,
+    transition: 'background var(--dur-fast) var(--ease-out)',
+    ...extra,
+});
+
 const ConfigSection = ({
     title, icon, listName, inputValue, setInputValue, placeholder,
     appConfig, saving, handleAddItem, handleRemoveItem, handleMoveItemUp, handleEditItem
@@ -10,10 +29,7 @@ const ConfigSection = ({
     const [editingIndex, setEditingIndex] = useState(null);
     const [editValue, setEditValue] = useState('');
 
-    const startEdit = (index, value) => {
-        setEditingIndex(index);
-        setEditValue(value);
-    };
+    const startEdit = (index, value) => { setEditingIndex(index); setEditValue(value); };
 
     const submitEdit = async (index) => {
         if (!editValue.trim() || editValue === appConfig[listName][index]) {
@@ -25,103 +41,125 @@ const ConfigSection = ({
     };
 
     return (
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-soft border border-white p-6 relative overflow-hidden group">
-            {/* Subtle Gradient background */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -z-10 group-hover:bg-primary/10 transition-colors"></div>
-
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary">{icon}</span>
-                        {title}
-                    </h3>
-                </div>
+        <div style={{
+            background: 'var(--bg-raised)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--r-2xl)',
+            padding: 20,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name={icon} size={20} color="var(--clay-500)" />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--fg-1)' }}>{title}</h3>
             </div>
 
-            {/* Input Row */}
-            <div className="flex gap-2 mb-6">
+            {/* Add row */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                 <input
                     type="text"
                     placeholder={placeholder}
-                    className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm font-medium"
+                    style={INPUT_STYLE}
                     value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddItem(listName, inputValue, setInputValue)}
+                    onChange={e => setInputValue(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddItem(listName, inputValue, setInputValue)}
                     disabled={saving}
                 />
                 <button
                     onClick={() => handleAddItem(listName, inputValue, setInputValue)}
                     disabled={saving || !inputValue.trim()}
-                    className="w-10 h-10 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-300 text-white rounded-xl shadow-sm transition-colors flex items-center justify-center shrink-0"
+                    style={{
+                        width: 38, height: 38,
+                        background: saving || !inputValue.trim() ? 'var(--bg-sunken)' : 'var(--ink-800)',
+                        color: saving || !inputValue.trim() ? 'var(--fg-4)' : '#fff',
+                        borderRadius: 'var(--r-lg)', border: 'none', cursor: saving || !inputValue.trim() ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                    }}
                 >
-                    <span className="material-symbols-outlined text-lg">add</span>
+                    <Icon name="add" size={18} />
                 </button>
             </div>
 
             {/* List */}
-            <div className="space-y-2">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {appConfig[listName] && appConfig[listName].length > 0 ? (
                     appConfig[listName].map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group/item hover:border-slate-300 transition-colors">
+                        <div key={idx} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '9px 10px',
+                            background: 'var(--bg-sunken)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--r-lg)',
+                        }}>
                             {editingIndex === idx ? (
-                                <div className="flex items-center gap-2 flex-1 mr-2">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, marginRight: 6 }}>
                                     <input
                                         type="text"
-                                        className="flex-1 px-3 py-1 bg-white border border-primary/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm font-bold text-slate-700"
+                                        style={{ ...INPUT_STYLE, border: '1px solid var(--clay-300)', background: 'var(--bg-raised)', padding: '6px 10px' }}
                                         value={editValue}
-                                        onChange={(e) => setEditValue(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && submitEdit(idx)}
+                                        onChange={e => setEditValue(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && submitEdit(idx)}
                                         autoFocus
                                         disabled={saving}
                                     />
                                     <button
                                         onClick={() => submitEdit(idx)}
                                         disabled={saving || !editValue.trim()}
-                                        className="w-8 h-8 rounded-lg hover:bg-green-50 text-green-600 flex items-center justify-center transition-colors disabled:opacity-50"
-                                        title="Guardar"
+                                        style={ICON_BTN({ color: 'var(--olive-600)' })}
+                                        onMouseEnter={e => e.currentTarget.style.background = 'var(--olive-50)'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                     >
-                                        <span className="material-symbols-outlined text-sm">check</span>
+                                        <Icon name="check" size={16} />
                                     </button>
                                     <button
                                         onClick={() => setEditingIndex(null)}
-                                        disabled={saving}
-                                        className="w-8 h-8 rounded-lg hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
-                                        title="Cancelar"
+                                        style={ICON_BTN({ color: 'var(--fg-3)' })}
+                                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-sunken)'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                     >
-                                        <span className="material-symbols-outlined text-sm">close</span>
+                                        <Icon name="close" size={16} />
                                     </button>
                                 </div>
                             ) : (
                                 <>
-                                    <span className="text-sm font-bold text-slate-700">
-                                        {item} {idx === 0 && listName === 'currencies' && <span className="ml-2 text-[10px] bg-primary/20 text-primary-dark px-2 py-0.5 rounded-md uppercase">Principal</span>}
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {item}
+                                        {idx === 0 && listName === 'currencies' && (
+                                            <span style={{
+                                                fontSize: 10, fontWeight: 700, padding: '2px 6px',
+                                                background: 'var(--clay-50)', color: 'var(--clay-600)',
+                                                borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                            }}>Principal</span>
+                                        )}
                                     </span>
-                                    <div className="flex items-center gap-1 opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                    <div style={{ display: 'flex', gap: 2 }}>
                                         <button
                                             onClick={() => startEdit(idx, item)}
                                             disabled={saving}
-                                            className="w-8 h-8 rounded-lg hover:bg-blue-50 text-blue-500 flex items-center justify-center transition-colors"
-                                            title="Editar"
+                                            style={ICON_BTN({ color: 'var(--clay-500)' })}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--clay-50)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                         >
-                                            <span className="material-symbols-outlined text-sm">edit</span>
+                                            <Icon name="edit" size={15} />
                                         </button>
                                         {idx > 0 && (
                                             <button
                                                 onClick={() => handleMoveItemUp(listName, idx)}
                                                 disabled={saving}
-                                                className="w-8 h-8 rounded-lg hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
-                                                title="Mover arriba"
+                                                style={ICON_BTN({ color: 'var(--fg-3)' })}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-canvas)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                             >
-                                                <span className="material-symbols-outlined text-sm">arrow_upward</span>
+                                                <Icon name="arrow_upward" size={15} />
                                             </button>
                                         )}
                                         <button
                                             onClick={() => handleRemoveItem(listName, idx)}
                                             disabled={saving}
-                                            className="w-8 h-8 rounded-lg hover:bg-red-50 text-red-500 flex items-center justify-center transition-colors disabled:opacity-50"
-                                            title="Eliminar"
+                                            style={ICON_BTN({ color: 'var(--danger-700)' })}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--danger-50)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                         >
-                                            <span className="material-symbols-outlined text-sm">delete</span>
+                                            <Icon name="delete" size={15} />
                                         </button>
                                     </div>
                                 </>
@@ -129,73 +167,45 @@ const ConfigSection = ({
                         </div>
                     ))
                 ) : (
-                    <p className="text-xs text-slate-400 italic text-center py-4">Sin elementos.</p>
+                    <p style={{ fontSize: 12, color: 'var(--fg-4)', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
+                        Sin elementos.
+                    </p>
                 )}
             </div>
         </div>
     );
 };
 
-// Specialized component for Categories with nesting
+const ICON_OPTIONS = [
+    'category','restaurant','directions_car','shopping_bag','payments','home','bolt',
+    'local_gas_station','flight','pets','fitness_center','school','health_and_safety',
+    'redeem','savings','credit_card','account_balance','work','storefront','movie',
+];
+
 const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
     const [newCategory, setNewCategory] = useState('');
     const [expandedCategories, setExpandedCategories] = useState({});
-    const [newSubcategories, setNewSubcategories] = useState({}); // Map of catIndex -> inputValue
-
+    const [newSubcategories, setNewSubcategories] = useState({});
     const [confirmDeleteCat, setConfirmDeleteCat] = useState({ isOpen: false, index: null });
-
-    // New attributes state for adding
     const [newCategoryIcon, setNewCategoryIcon] = useState('category');
     const [newCategoryType, setNewCategoryType] = useState('debit');
     const [newCategoryContext, setNewCategoryContext] = useState('personal');
-
-    // Editing State
     const [editingCatIndex, setEditingCatIndex] = useState(null);
-    const [editCatForm, setEditCatForm] = useState({
-        name: '',
-        icon: 'category',
-        type: 'debit',
-        context: 'personal'
-    });
-
-    // Subcategory Editing State
-    const [editingSub, setEditingSub] = useState(null); // { catIndex: number, subIndex: number } | null
+    const [editCatForm, setEditCatForm] = useState({ name: '', icon: 'category', type: 'debit', context: 'personal' });
+    const [editingSub, setEditingSub] = useState(null);
     const [editSubValue, setEditSubValue] = useState('');
 
-    // Safely access categories, defaulting to empty array if undefined
-    // And ensure we handle the case where migration hasn't run yet (strings vs objects)
-    // Although FinanceContext migration should handle it, we want to be safe.
     const categories = Array.isArray(appConfig.categories) ? appConfig.categories : [];
+    const getCatName = cat => typeof cat === 'string' ? cat : cat.name;
+    const getSubcats = cat => typeof cat === 'string' ? [] : (cat.subcategories || []);
 
-    // Helper to get category name safely
-    const getCatName = (cat) => typeof cat === 'string' ? cat : cat.name;
-    const getSubcats = (cat) => typeof cat === 'string' ? [] : (cat.subcategories || []);
-
-    const toggleExpand = (index) => {
-        setExpandedCategories(prev => ({
-            ...prev,
-            [index]: !prev[index]
-        }));
-    };
+    const toggleExpand = idx => setExpandedCategories(prev => ({ ...prev, [idx]: !prev[idx] }));
 
     const handleAddCategory = async () => {
         if (!newCategory.trim()) return;
         const trimmed = newCategory.trim();
-
-        // Prevent duplicates
         if (categories.some(c => getCatName(c) === trimmed)) return;
-
-        const updatedCategories = [
-            ...categories,
-            {
-                name: trimmed,
-                subcategories: [],
-                icon: newCategoryIcon,
-                type: newCategoryType,
-                context: newCategoryContext
-            }
-        ];
-
+        const updatedCategories = [...categories, { name: trimmed, subcategories: [], icon: newCategoryIcon, type: newCategoryType, context: newCategoryContext }];
         await updateAppConfig({ ...appConfig, categories: updatedCategories });
         setNewCategory('');
         setNewCategoryIcon('category');
@@ -203,53 +213,29 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
 
     const startEditCategory = (index, cat) => {
         setEditingCatIndex(index);
-        setEditCatForm({
-            name: getCatName(cat),
-            icon: cat.icon || 'category',
-            type: cat.type || 'debit',
-            context: cat.context || 'personal'
-        });
+        setEditCatForm({ name: getCatName(cat), icon: cat.icon || 'category', type: cat.type || 'debit', context: cat.context || 'personal' });
     };
 
     const submitEditCategory = async (index) => {
         const trimmed = editCatForm.name.trim();
-        if (!trimmed) {
-            setEditingCatIndex(null);
-            return;
-        }
-
-        // Check for duplicates (ignoring if we're just changing case or not modifying)
+        if (!trimmed) { setEditingCatIndex(null); return; }
         const isDuplicate = categories.some((c, i) => i !== index && getCatName(c).toLowerCase() === trimmed.toLowerCase());
-        if (isDuplicate) {
-            alert("Ya existe una categoría con este nombre.");
-            return;
-        }
-
+        if (isDuplicate) { alert("Ya existe una categoría con este nombre."); return; }
         const updatedCategories = [...categories];
         let category = updatedCategories[index];
-        if (typeof category === 'string') {
-            category = { name: trimmed, subcategories: [] };
-        } else {
-            category = { ...category };
-            category.name = trimmed;
-        }
-
+        if (typeof category === 'string') { category = { name: trimmed, subcategories: [] }; }
+        else { category = { ...category, name: trimmed }; }
         category.icon = editCatForm.icon;
         category.type = editCatForm.type;
         category.context = editCatForm.context;
-
         updatedCategories[index] = category;
-
         await updateAppConfig({ ...appConfig, categories: updatedCategories });
         setEditingCatIndex(null);
     };
 
-    const handleDeleteCategory = (index) => {
-        if (categories.length === 1) {
-            alert("No puedes eliminar la última categoría. Debes tener al menos una.");
-            return;
-        }
-        setConfirmDeleteCat({ isOpen: true, index });
+    const handleDeleteCategory = idx => {
+        if (categories.length === 1) { alert("No puedes eliminar la última categoría."); return; }
+        setConfirmDeleteCat({ isOpen: true, index: idx });
     };
 
     const confirmDeleteCategory = async () => {
@@ -267,40 +253,18 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
         await updateAppConfig({ ...appConfig, categories: updatedCategories });
     };
 
-    const startEditSubcategory = (catIndex, subIndex, currentValue) => {
-        setEditingSub({ catIndex, subIndex });
-        setEditSubValue(currentValue);
-    };
+    const startEditSubcategory = (catIndex, subIndex, currentValue) => { setEditingSub({ catIndex, subIndex }); setEditSubValue(currentValue); };
 
     const submitEditSubcategory = async (catIndex, subIndex) => {
         const trimmed = editSubValue.trim();
-        if (!trimmed) {
-            setEditingSub(null);
-            return;
-        }
-
+        if (!trimmed) { setEditingSub(null); return; }
         const category = categories[catIndex];
         const subcats = getSubcats(category);
-
-        // Check for duplicates within this category
-        const isDuplicate = subcats.some((s, i) => i !== subIndex && s.toLowerCase() === trimmed.toLowerCase());
-        if (isDuplicate) {
-            alert("Ya existe una subcategoría con este nombre.");
-            return;
-        }
-
+        if (subcats.some((s, i) => i !== subIndex && s.toLowerCase() === trimmed.toLowerCase())) { alert("Ya existe una subcategoría con este nombre."); return; }
         const updatedCategories = [...categories];
         const updatedSubcats = [...subcats];
         updatedSubcats[subIndex] = trimmed;
-
-        let updatedCategory = category;
-        if (typeof updatedCategory === 'string') {
-            updatedCategory = { name: updatedCategory, subcategories: updatedSubcats };
-        } else {
-            updatedCategory = { ...updatedCategory };
-            updatedCategory.subcategories = updatedSubcats;
-        }
-
+        let updatedCategory = typeof category === 'string' ? { name: category, subcategories: updatedSubcats } : { ...category, subcategories: updatedSubcats };
         updatedCategories[catIndex] = updatedCategory;
         await updateAppConfig({ ...appConfig, categories: updatedCategories });
         setEditingSub(null);
@@ -308,24 +272,16 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
 
     const handleAddSubcategory = async (catIndex) => {
         const val = newSubcategories[catIndex];
-        if (!val || !val.trim()) return;
+        if (!val?.trim()) return;
         const trimmed = val.trim();
-
         const updatedCategories = [...categories];
-        // Ensure we are working with an object structure even if it was a string
         let category = updatedCategories[catIndex];
-        if (typeof category === 'string') {
-            category = { name: category, subcategories: [] };
-        } else {
-            category = { ...category };
-        }
-
+        if (typeof category === 'string') category = { name: category, subcategories: [] };
+        else category = { ...category };
         const currentSubs = category.subcategories || [];
         if (currentSubs.includes(trimmed)) return;
-
         category.subcategories = [...currentSubs, trimmed];
         updatedCategories[catIndex] = category;
-
         await updateAppConfig({ ...appConfig, categories: updatedCategories });
         setNewSubcategories(prev => ({ ...prev, [catIndex]: '' }));
     };
@@ -333,366 +289,330 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
     const handleDeleteSubcategory = async (catIndex, subIndex) => {
         const updatedCategories = [...categories];
         let category = { ...updatedCategories[catIndex] };
-        // Safety check if it was string, but deleting subcat implies it was already object or we can't be here
         if (typeof category === 'string') return;
-
         const updatedSubs = [...category.subcategories];
         updatedSubs.splice(subIndex, 1);
         category.subcategories = updatedSubs;
         updatedCategories[catIndex] = category;
-
         await updateAppConfig({ ...appConfig, categories: updatedCategories });
     };
 
-    return (
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-soft border border-white p-6 relative overflow-hidden group">
-            {/* Subtle Gradient background */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -z-10 group-hover:bg-primary/10 transition-colors"></div>
+    const typeBadge = (type) => type === 'credit'
+        ? { bg: 'var(--olive-50)', color: 'var(--olive-600)', label: 'Ingreso' }
+        : { bg: 'var(--danger-50)', color: 'var(--danger-700)', label: 'Egreso' };
 
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary">category</span>
-                        Categorías
-                    </h3>
-                </div>
+    const ctxBadge = (ctx) => ctx === 'business'
+        ? { bg: 'var(--plum-50)', color: 'var(--plum-600)', label: 'Negocio' }
+        : { bg: 'var(--clay-50)', color: 'var(--clay-600)', label: 'Personal' };
+
+    const Badge = ({ bg, color, label }) => (
+        <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', background: bg, color, borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {label}
+        </span>
+    );
+
+    const iconSelectStyle = {
+        height: 38, width: 60,
+        background: 'var(--bg-sunken)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--r-lg)',
+        color: 'var(--fg-1)',
+        cursor: 'pointer',
+        appearance: 'none',
+        textAlign: 'center',
+        flexShrink: 0,
+        fontSize: 22,
+        outline: 'none',
+    };
+
+    return (
+        <div style={{
+            background: 'var(--bg-raised)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--r-2xl)',
+            padding: 20,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name="category" size={20} color="var(--clay-500)" />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--fg-1)' }}>Categorías</h3>
             </div>
 
-            {/* Main Input Row */}
-            <div className="flex flex-col gap-3 mb-6">
-                <div className="flex gap-2">
-                    <div className="relative h-[42px]">
-                        <select
-                            className="h-full w-[60px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-slate-700 material-symbols-outlined cursor-pointer appearance-none text-center"
-                            style={{ fontSize: '24px', textAlignLast: 'center' }}
-                            value={newCategoryIcon}
-                            onChange={(e) => setNewCategoryIcon(e.target.value)}
-                            disabled={saving}
-                        >
-                            <option value="category">category</option>
-                            <option value="restaurant">restaurant</option>
-                            <option value="directions_car">directions_car</option>
-                            <option value="shopping_bag">shopping_bag</option>
-                            <option value="payments">payments</option>
-                            <option value="home">home</option>
-                            <option value="bolt">bolt</option>
-                            <option value="local_gas_station">local_gas_station</option>
-                            <option value="flight">flight</option>
-                            <option value="pets">pets</option>
-                            <option value="fitness_center">fitness_center</option>
-                            <option value="school">school</option>
-                            <option value="health_and_safety">health_and_safety</option>
-                            <option value="redeem">redeem</option>
-                            <option value="savings">savings</option>
-                            <option value="credit_card">credit_card</option>
-                            <option value="account_balance">account_balance</option>
-                            <option value="work">work</option>
-                            <option value="storefront">storefront</option>
-                            <option value="movie">movie</option>
-                        </select>
-                    </div>
-
+            {/* Add form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <select
+                        className="material-symbols-outlined"
+                        style={iconSelectStyle}
+                        value={newCategoryIcon}
+                        onChange={e => setNewCategoryIcon(e.target.value)}
+                        disabled={saving}
+                    >
+                        {ICON_OPTIONS.map(ico => <option key={ico} value={ico}>{ico}</option>)}
+                    </select>
                     <input
                         type="text"
                         placeholder="Nueva Categoría..."
-                        className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm font-medium"
+                        style={INPUT_STYLE}
                         value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                        onChange={e => setNewCategory(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
                         disabled={saving}
                     />
                 </div>
-
-                <div className="flex gap-2">
+                <div style={{ display: 'flex', gap: 8 }}>
                     <select
-                        className="custom-select flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm font-medium text-slate-600"
+                        style={{ ...INPUT_STYLE, flex: 1 }}
                         value={newCategoryType}
-                        onChange={(e) => setNewCategoryType(e.target.value)}
+                        onChange={e => setNewCategoryType(e.target.value)}
                         disabled={saving}
                     >
                         <option value="debit">Egreso</option>
                         <option value="credit">Ingreso</option>
                     </select>
-
                     <select
-                        className="custom-select flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm font-medium text-slate-600"
+                        style={{ ...INPUT_STYLE, flex: 1 }}
                         value={newCategoryContext}
-                        onChange={(e) => setNewCategoryContext(e.target.value)}
+                        onChange={e => setNewCategoryContext(e.target.value)}
                         disabled={saving}
                     >
                         <option value="personal">Personal</option>
                         <option value="business">Negocio</option>
                         <option value="both">Ambos</option>
                     </select>
-
                     <button
                         onClick={handleAddCategory}
                         disabled={saving || !newCategory.trim()}
-                        className="w-10 h-10 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-300 text-white rounded-xl shadow-sm transition-colors flex items-center justify-center shrink-0"
+                        style={{
+                            width: 38, height: 38, flexShrink: 0,
+                            background: saving || !newCategory.trim() ? 'var(--bg-sunken)' : 'var(--ink-800)',
+                            color: saving || !newCategory.trim() ? 'var(--fg-4)' : '#fff',
+                            borderRadius: 'var(--r-lg)', border: 'none',
+                            cursor: saving || !newCategory.trim() ? 'not-allowed' : 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
                     >
-                        <span className="material-symbols-outlined text-lg">add</span>
+                        <Icon name="add" size={18} />
                     </button>
                 </div>
             </div>
 
-            {/* List */}
-            <div className="space-y-2">
-                {categories.length > 0 ? (
-                    categories.map((cat, idx) => {
-                        const name = getCatName(cat);
-                        const subcats = getSubcats(cat);
-                        const isExpanded = expandedCategories[idx];
+            {/* Category list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {categories.length > 0 ? categories.map((cat, idx) => {
+                    const name = getCatName(cat);
+                    const subcats = getSubcats(cat);
+                    const isExpanded = expandedCategories[idx];
 
-                        return (
-                            <div key={idx} className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden transition-all">
-                                {editingCatIndex === idx ? (
-                                    <div className="p-3 bg-white border-b border-primary/20 flex flex-col gap-2">
-                                        <div className="flex gap-2">
-                                            <div className="relative h-[34px]">
-                                                <select
-                                                    className="h-full w-[60px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-slate-700 material-symbols-outlined cursor-pointer appearance-none text-center"
-                                                    style={{ fontSize: '20px', textAlignLast: 'center' }}
-                                                    value={editCatForm.icon}
-                                                    onChange={(e) => setEditCatForm({ ...editCatForm, icon: e.target.value })}
-                                                    disabled={saving}
-                                                >
-                                                    <option value="category">category</option>
-                                                    <option value="restaurant">restaurant</option>
-                                                    <option value="directions_car">directions_car</option>
-                                                    <option value="shopping_bag">shopping_bag</option>
-                                                    <option value="payments">payments</option>
-                                                    <option value="home">home</option>
-                                                    <option value="bolt">bolt</option>
-                                                    <option value="local_gas_station">local_gas_station</option>
-                                                    <option value="flight">flight</option>
-                                                    <option value="pets">pets</option>
-                                                    <option value="fitness_center">fitness_center</option>
-                                                    <option value="school">school</option>
-                                                    <option value="health_and_safety">health_and_safety</option>
-                                                    <option value="redeem">redeem</option>
-                                                    <option value="savings">savings</option>
-                                                    <option value="credit_card">credit_card</option>
-                                                    <option value="account_balance">account_balance</option>
-                                                    <option value="work">work</option>
-                                                    <option value="storefront">storefront</option>
-                                                    <option value="movie">movie</option>
-                                                </select>
+                    return (
+                        <div key={idx} style={{
+                            background: 'var(--bg-sunken)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--r-lg)',
+                            overflow: 'hidden',
+                        }}>
+                            {editingCatIndex === idx ? (
+                                <div style={{ padding: 10, background: 'var(--bg-raised)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <select
+                                            className="material-symbols-outlined"
+                                            style={{ ...iconSelectStyle, fontSize: 18, height: 34 }}
+                                            value={editCatForm.icon}
+                                            onChange={e => setEditCatForm({ ...editCatForm, icon: e.target.value })}
+                                            disabled={saving}
+                                        >
+                                            {ICON_OPTIONS.map(ico => <option key={ico} value={ico}>{ico}</option>)}
+                                        </select>
+                                        <input
+                                            type="text"
+                                            style={{ ...INPUT_STYLE, border: '1px solid var(--clay-300)', background: 'var(--bg-raised)', padding: '6px 10px', fontWeight: 700 }}
+                                            value={editCatForm.name}
+                                            onChange={e => setEditCatForm({ ...editCatForm, name: e.target.value })}
+                                            onKeyDown={e => e.key === 'Enter' && submitEditCategory(idx)}
+                                            autoFocus disabled={saving}
+                                        />
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <select style={{ ...INPUT_STYLE, flex: 1, fontSize: 12, padding: '6px 10px' }} value={editCatForm.type}
+                                            onChange={e => setEditCatForm({ ...editCatForm, type: e.target.value })} disabled={saving}>
+                                            <option value="debit">Egreso</option>
+                                            <option value="credit">Ingreso</option>
+                                        </select>
+                                        <select style={{ ...INPUT_STYLE, flex: 1, fontSize: 12, padding: '6px 10px' }} value={editCatForm.context}
+                                            onChange={e => setEditCatForm({ ...editCatForm, context: e.target.value })} disabled={saving}>
+                                            <option value="personal">Personal</option>
+                                            <option value="business">Negocio</option>
+                                            <option value="both">Ambos</option>
+                                        </select>
+                                        <button onClick={() => submitEditCategory(idx)} disabled={saving || !editCatForm.name.trim()}
+                                            style={ICON_BTN({ color: 'var(--olive-600)' })}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--olive-50)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                            <Icon name="check" size={16} />
+                                        </button>
+                                        <button onClick={() => setEditingCatIndex(null)}
+                                            style={ICON_BTN({ color: 'var(--fg-3)' })}
+                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-sunken)'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                            <Icon name="close" size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 10px' }}>
+                                        <div
+                                            style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, cursor: 'pointer' }}
+                                            onClick={() => toggleExpand(idx)}
+                                        >
+                                            <span style={{
+                                                fontSize: 14, color: 'var(--fg-3)',
+                                                transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)',
+                                                transition: 'transform var(--dur-fast) var(--ease-out)',
+                                                display: 'inline-block',
+                                                fontFamily: 'Material Symbols Outlined',
+                                            }}>chevron_right</span>
+                                            <span style={{ fontSize: 11, color: 'var(--fg-4)', fontWeight: 600, minWidth: 14 }}>{subcats.length}</span>
+                                            <div style={{
+                                                width: 30, height: 30, borderRadius: 8,
+                                                background: 'var(--ink-800)',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                flexShrink: 0,
+                                            }}>
+                                                <Icon name={cat.icon || 'category'} size={16} color="#fff" />
                                             </div>
-
-                                            <input
-                                                type="text"
-                                                className="flex-1 px-3 py-1 bg-white border border-primary/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm font-bold text-slate-700"
-                                                value={editCatForm.name}
-                                                onChange={(e) => setEditCatForm({ ...editCatForm, name: e.target.value })}
-                                                onKeyDown={(e) => e.key === 'Enter' && submitEditCategory(idx)}
-                                                autoFocus
-                                                disabled={saving}
-                                            />
+                                            <div>
+                                                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg-1)' }}>{name}</div>
+                                                <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                                                    <Badge {...typeBadge(cat.type)} />
+                                                    {cat.context === 'both' ? (
+                                                        <><Badge {...ctxBadge('personal')} /><Badge {...ctxBadge('business')} /></>
+                                                    ) : <Badge {...ctxBadge(cat.context)} />}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <select
-                                                className="custom-select flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-xs font-medium text-slate-600"
-                                                value={editCatForm.type}
-                                                onChange={(e) => setEditCatForm({ ...editCatForm, type: e.target.value })}
-                                                disabled={saving}
-                                            >
-                                                <option value="debit">Egreso</option>
-                                                <option value="credit">Ingreso</option>
-                                            </select>
-
-                                            <select
-                                                className="custom-select flex-1 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 text-xs font-medium text-slate-600"
-                                                value={editCatForm.context}
-                                                onChange={(e) => setEditCatForm({ ...editCatForm, context: e.target.value })}
-                                                disabled={saving}
-                                            >
-                                                <option value="personal">Personal</option>
-                                                <option value="business">Negocio</option>
-                                                <option value="both">Ambos</option>
-                                            </select>
-
-                                            <div className="flex items-center gap-1 shrink-0">
-                                                <button
-                                                    onClick={() => submitEditCategory(idx)}
-                                                    disabled={saving || !editCatForm.name.trim()}
-                                                    className="w-8 h-8 rounded-lg hover:bg-green-50 text-green-600 flex items-center justify-center transition-colors disabled:opacity-50"
-                                                    title="Guardar"
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">check</span>
+                                        <div style={{ display: 'flex', gap: 2 }}>
+                                            <button onClick={() => startEditCategory(idx, cat)} disabled={saving}
+                                                style={ICON_BTN({ color: 'var(--clay-500)' })}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'var(--clay-50)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                <Icon name="edit" size={15} />
+                                            </button>
+                                            {idx > 0 && (
+                                                <button onClick={() => handleMoveCategoryUp(idx)} disabled={saving}
+                                                    style={ICON_BTN({ color: 'var(--fg-3)' })}
+                                                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-canvas)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                    <Icon name="arrow_upward" size={15} />
                                                 </button>
-                                                <button
-                                                    onClick={() => setEditingCatIndex(null)}
-                                                    disabled={saving}
-                                                    className="w-8 h-8 rounded-lg hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
-                                                    title="Cancelar"
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">close</span>
-                                                </button>
-                                            </div>
+                                            )}
+                                            <button onClick={() => handleDeleteCategory(idx)} disabled={saving}
+                                                style={ICON_BTN({ color: 'var(--danger-700)' })}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'var(--danger-50)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                <Icon name="delete" size={15} />
+                                            </button>
                                         </div>
                                     </div>
-                                ) : (
-                                    <>
-                                        {/* Header Row */}
-                                        <div className="flex items-center justify-between p-3 hover:bg-slate-100 transition-colors">
-                                            <div
-                                                className="flex items-center gap-2 flex-1 cursor-pointer"
-                                                onClick={() => toggleExpand(idx)}
-                                            >
-                                                <div className="flex items-center">
-                                                    <button className={`w-6 h-6 flex items-center justify-center rounded-md hover:bg-slate-200 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
-                                                        <span className="material-symbols-outlined text-lg">chevron_right</span>
-                                                    </button>
-                                                    <span className="text-xs font-bold text-slate-400 ml-0.5">{subcats.length}</span>
-                                                </div>
-                                                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white shrink-0 shadow-sm border border-slate-600">
-                                                    <span className="material-symbols-outlined text-sm">{cat.icon || 'category'}</span>
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-sm font-bold text-slate-700">{name}</span>
-                                                    </div>
-                                                    <div className="flex gap-1 mt-0.5">
-                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase ${cat.type === 'credit' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                            {cat.type === 'credit' ? 'Ingreso' : 'Egreso'}
-                                                        </span>
-                                                        {cat.context === 'both' ? (
-                                                            <>
-                                                                <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase bg-blue-100 text-blue-700">Personal</span>
-                                                                <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase bg-purple-100 text-purple-700">Negocio</span>
-                                                            </>
-                                                        ) : (
-                                                            <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase ${cat.context === 'business' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                                {cat.context === 'business' ? 'Negocio' : 'Personal'}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
+
+                                    {isExpanded && (
+                                        <div style={{
+                                            background: 'var(--bg-canvas)',
+                                            borderTop: '1px solid var(--border-subtle)',
+                                            padding: '10px 10px 10px 48px',
+                                        }}>
+                                            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                                                <input
+                                                    type="text"
+                                                    placeholder={`Subcategoría de ${name}...`}
+                                                    style={{ ...INPUT_STYLE, fontSize: 12, padding: '7px 10px' }}
+                                                    value={newSubcategories[idx] || ''}
+                                                    onChange={e => setNewSubcategories(prev => ({ ...prev, [idx]: e.target.value }))}
+                                                    onKeyDown={e => e.key === 'Enter' && handleAddSubcategory(idx)}
+                                                    disabled={saving}
+                                                />
+                                                <button
+                                                    onClick={() => handleAddSubcategory(idx)}
+                                                    disabled={saving || !(newSubcategories[idx] || '').trim()}
+                                                    style={{
+                                                        width: 32, height: 32, flexShrink: 0,
+                                                        background: 'var(--ink-800)', color: '#fff',
+                                                        borderRadius: 8, border: 'none', cursor: 'pointer',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    }}
+                                                >
+                                                    <Icon name="add" size={15} />
+                                                </button>
                                             </div>
 
-                                            <div className="flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
-                                                <button
-                                                    onClick={() => startEditCategory(idx, cat)}
-                                                    disabled={saving}
-                                                    className="w-8 h-8 rounded-lg hover:bg-blue-50 text-blue-500 flex items-center justify-center transition-colors disabled:opacity-50"
-                                                    title="Editar"
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">edit</span>
-                                                </button>
-                                                {idx > 0 && (
-                                                    <button
-                                                        onClick={() => handleMoveCategoryUp(idx)}
-                                                        disabled={saving}
-                                                        className="w-8 h-8 rounded-lg hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors disabled:opacity-50"
-                                                        title="Mover arriba"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">arrow_upward</span>
-                                                    </button>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                {subcats.length > 0 ? subcats.map((sub, sIdx) => {
+                                                    const isEditingThisSub = editingSub?.catIndex === idx && editingSub?.subIndex === sIdx;
+                                                    return isEditingThisSub ? (
+                                                        <div key={sIdx} style={{
+                                                            display: 'flex', alignItems: 'center', gap: 6,
+                                                            padding: 6,
+                                                            background: 'var(--bg-raised)',
+                                                            border: '1px solid var(--clay-200)',
+                                                            borderRadius: 8,
+                                                        }}>
+                                                            <input
+                                                                type="text"
+                                                                style={{ ...INPUT_STYLE, fontSize: 12, padding: '5px 8px', background: 'var(--bg-sunken)' }}
+                                                                value={editSubValue}
+                                                                onChange={e => setEditSubValue(e.target.value)}
+                                                                onKeyDown={e => e.key === 'Enter' && submitEditSubcategory(idx, sIdx)}
+                                                                autoFocus disabled={saving}
+                                                            />
+                                                            <button onClick={() => submitEditSubcategory(idx, sIdx)} disabled={saving || !editSubValue.trim()}
+                                                                style={ICON_BTN({ width: 26, height: 26, color: 'var(--olive-600)' })}
+                                                                onMouseEnter={e => e.currentTarget.style.background = 'var(--olive-50)'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                                <Icon name="check" size={14} />
+                                                            </button>
+                                                            <button onClick={() => setEditingSub(null)}
+                                                                style={ICON_BTN({ width: 26, height: 26, color: 'var(--fg-3)' })}
+                                                                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-sunken)'}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                                <Icon name="close" size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div key={sIdx} style={{
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                            padding: '6px 8px',
+                                                            background: 'var(--bg-raised)',
+                                                            border: '1px solid var(--border-subtle)',
+                                                            borderRadius: 8,
+                                                        }}>
+                                                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg-2)' }}>{sub}</span>
+                                                            <div style={{ display: 'flex', gap: 2 }}>
+                                                                <button onClick={() => startEditSubcategory(idx, sIdx, sub)} disabled={saving}
+                                                                    style={ICON_BTN({ width: 26, height: 26, color: 'var(--clay-500)' })}
+                                                                    onMouseEnter={e => e.currentTarget.style.background = 'var(--clay-50)'}
+                                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                                    <Icon name="edit" size={13} />
+                                                                </button>
+                                                                <button onClick={() => handleDeleteSubcategory(idx, sIdx)} disabled={saving}
+                                                                    style={ICON_BTN({ width: 26, height: 26, color: 'var(--danger-700)' })}
+                                                                    onMouseEnter={e => e.currentTarget.style.background = 'var(--danger-50)'}
+                                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                                    <Icon name="close" size={13} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }) : (
+                                                    <p style={{ fontSize: 11, color: 'var(--fg-4)', fontStyle: 'italic' }}>No hay subcategorías.</p>
                                                 )}
-                                                <button
-                                                    onClick={() => handleDeleteCategory(idx)}
-                                                    disabled={saving}
-                                                    className="w-8 h-8 rounded-lg hover:bg-red-50 text-red-500 flex items-center justify-center transition-colors disabled:opacity-50"
-                                                    title="Eliminar"
-                                                >
-                                                    <span className="material-symbols-outlined text-sm">delete</span>
-                                                </button>
                                             </div>
                                         </div>
-
-                                        {/* Expanded Subcategories Area */}
-                                        {isExpanded && (
-                                            <div className="bg-slate-100/50 p-3 border-t border-slate-100 pl-10">
-                                                {/* Add Subcategory Input */}
-                                                <div className="flex gap-2 mb-3">
-                                                    <input
-                                                        type="text"
-                                                        placeholder={`Subcategoría de ${name}...`}
-                                                        className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-xs font-medium"
-                                                        value={newSubcategories[idx] || ''}
-                                                        onChange={(e) => setNewSubcategories(prev => ({ ...prev, [idx]: e.target.value }))}
-                                                        onKeyDown={(e) => e.key === 'Enter' && handleAddSubcategory(idx)}
-                                                        disabled={saving}
-                                                    />
-                                                    <button
-                                                        onClick={() => handleAddSubcategory(idx)}
-                                                        disabled={saving || !(newSubcategories[idx] || '').trim()}
-                                                        className="w-8 h-8 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-300 text-white rounded-lg shadow-sm transition-colors flex items-center justify-center shrink-0"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">add</span>
-                                                    </button>
-                                                </div>
-
-                                                {/* Subcategories List */}
-                                                <div className="space-y-1">
-                                                    {subcats.length > 0 ? (
-                                                        subcats.map((sub, sIdx) => {
-                                                            const isEditingThisSub = editingSub?.catIndex === idx && editingSub?.subIndex === sIdx;
-                                                            return isEditingThisSub ? (
-                                                                <div key={sIdx} className="flex items-center gap-2 p-1.5 bg-white rounded-lg border border-primary/30">
-                                                                    <input
-                                                                        type="text"
-                                                                        className="flex-1 px-2 py-1 bg-slate-50 border border-transparent rounded-md focus:outline-none focus:ring-1 focus:ring-primary/50 text-xs font-bold text-slate-700"
-                                                                        value={editSubValue}
-                                                                        onChange={(e) => setEditSubValue(e.target.value)}
-                                                                        onKeyDown={(e) => e.key === 'Enter' && submitEditSubcategory(idx, sIdx)}
-                                                                        autoFocus
-                                                                        disabled={saving}
-                                                                    />
-                                                                    <button
-                                                                        onClick={() => submitEditSubcategory(idx, sIdx)}
-                                                                        disabled={saving || !editSubValue.trim()}
-                                                                        className="w-6 h-6 rounded hover:bg-green-50 text-green-600 flex items-center justify-center transition-colors disabled:opacity-50 shrink-0"
-                                                                        title="Guardar"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-sm">check</span>
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => setEditingSub(null)}
-                                                                        disabled={saving}
-                                                                        className="w-6 h-6 rounded hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors shrink-0"
-                                                                        title="Cancelar"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-sm">close</span>
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <div key={sIdx} className="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200/50 group/sub">
-                                                                    <span className="text-xs font-bold text-slate-600">{sub}</span>
-                                                                    <div className="flex items-center gap-1 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                                                                        <button
-                                                                            onClick={() => startEditSubcategory(idx, sIdx, sub)}
-                                                                            disabled={saving}
-                                                                            className="w-6 h-6 rounded hover:bg-blue-50 text-blue-500 flex items-center justify-center transition-colors"
-                                                                            title="Editar subcategoría"
-                                                                        >
-                                                                            <span className="material-symbols-outlined text-[14px]">edit</span>
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleDeleteSubcategory(idx, sIdx)}
-                                                                            disabled={saving}
-                                                                            className="w-6 h-6 rounded hover:bg-red-50 text-red-400 flex items-center justify-center transition-colors"
-                                                                            title="Eliminar subcategoría"
-                                                                        >
-                                                                            <span className="material-symbols-outlined text-[14px]">close</span>
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })
-                                                    ) : (
-                                                        <p className="text-[10px] text-slate-400 italic">No hay subcategorías.</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        );
-                    })
-                ) : (
-                    <p className="text-xs text-slate-400 italic text-center py-4">Sin elementos.</p>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    );
+                }) : (
+                    <p style={{ fontSize: 12, color: 'var(--fg-4)', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>Sin elementos.</p>
                 )}
             </div>
 
@@ -701,7 +621,7 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
                 onClose={() => setConfirmDeleteCat({ isOpen: false, index: null })}
                 onConfirm={confirmDeleteCategory}
                 title="Eliminar Categoría"
-                message="¿Estás seguro de que deseas eliminar esta categoría y todas sus subcategorías? Esta acción no se puede deshacer y puede afectar las transacciones existentes."
+                message="¿Estás seguro? Se eliminarán también todas sus subcategorías. Esta acción no se puede deshacer."
                 confirmText="Eliminar"
                 cancelText="Cancelar"
                 isDestructive={true}
@@ -713,52 +633,30 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
 export default function Settings() {
     const { appConfig, updateAppConfig } = useFinance();
     const [saving, setSaving] = useState(false);
-
-    // Local state for inputs
     const [newCurrency, setNewCurrency] = useState('');
     const [newAccount, setNewAccount] = useState('');
 
     const handleAddItem = async (listName, value, setter) => {
         if (!value.trim()) return;
         const trimmed = value.trim();
-        if (appConfig[listName].includes(trimmed)) return; // Prevent duplicates
-
+        if (appConfig[listName].includes(trimmed)) return;
         setSaving(true);
         try {
-            const updatedConfig = {
-                ...appConfig,
-                [listName]: [...appConfig[listName], trimmed]
-            };
-            await updateAppConfig(updatedConfig);
-            setter(''); // Clear input
-        } catch (error) {
-            console.error("Error adding item:", error);
-        } finally {
-            setSaving(false);
-        }
+            await updateAppConfig({ ...appConfig, [listName]: [...appConfig[listName], trimmed] });
+            setter('');
+        } catch (error) { console.error("Error adding item:", error); }
+        finally { setSaving(false); }
     };
 
     const handleRemoveItem = async (listName, index) => {
-        if (appConfig[listName].length === 1) {
-            alert("No puedes eliminar el último elemento de esta lista. Debes tener al menos uno.");
-            return;
-        }
-
+        if (appConfig[listName].length === 1) { alert("No puedes eliminar el último elemento. Debes tener al menos uno."); return; }
         setSaving(true);
         try {
             const updatedList = [...appConfig[listName]];
             updatedList.splice(index, 1);
-
-            const updatedConfig = {
-                ...appConfig,
-                [listName]: updatedList
-            };
-            await updateAppConfig(updatedConfig);
-        } catch (error) {
-            console.error("Error removing item:", error);
-        } finally {
-            setSaving(false);
-        }
+            await updateAppConfig({ ...appConfig, [listName]: updatedList });
+        } catch (error) { console.error("Error removing item:", error); }
+        finally { setSaving(false); }
     };
 
     const handleMoveItemUp = async (listName, index) => {
@@ -766,63 +664,44 @@ export default function Settings() {
         setSaving(true);
         try {
             const updatedList = [...appConfig[listName]];
-            // Swap elements
             [updatedList[index - 1], updatedList[index]] = [updatedList[index], updatedList[index - 1]];
-
-            const updatedConfig = {
-                ...appConfig,
-                [listName]: updatedList
-            };
-            await updateAppConfig(updatedConfig);
-        } catch (error) {
-            console.error("Error moving item:", error);
-        } finally {
-            setSaving(false);
-        }
+            await updateAppConfig({ ...appConfig, [listName]: updatedList });
+        } catch (error) { console.error("Error moving item:", error); }
+        finally { setSaving(false); }
     };
 
     const handleEditItem = async (listName, index, newValue) => {
         const trimmed = newValue.trim();
         if (!trimmed) return;
-
-        // Check for duplicates (ignoring if we're just changing case or not modifying)
-        const isDuplicate = appConfig[listName].some((item, i) => i !== index && item.toLowerCase() === trimmed.toLowerCase());
-        if (isDuplicate) {
-            alert("Ya existe un elemento con este nombre.");
-            return;
-        }
-
+        if (appConfig[listName].some((item, i) => i !== index && item.toLowerCase() === trimmed.toLowerCase())) { alert("Ya existe un elemento con este nombre."); return; }
         setSaving(true);
         try {
             const updatedList = [...appConfig[listName]];
             updatedList[index] = trimmed;
-
-            const updatedConfig = {
-                ...appConfig,
-                [listName]: updatedList
-            };
-            await updateAppConfig(updatedConfig);
-        } catch (error) {
-            console.error("Error editing item:", error);
-        } finally {
-            setSaving(false);
-        }
+            await updateAppConfig({ ...appConfig, [listName]: updatedList });
+        } catch (error) { console.error("Error editing item:", error); }
+        finally { setSaving(false); }
     };
 
-    const sharedSectionProps = {
-        appConfig, saving, handleAddItem, handleRemoveItem, handleMoveItemUp, handleEditItem
-    };
+    const sharedSectionProps = { appConfig, saving, handleAddItem, handleRemoveItem, handleMoveItemUp, handleEditItem };
 
     return (
-        <div className="flex-1 overflow-y-auto p-6 lg:p-8">
-            <div className="max-w-[1600px] mx-auto w-full">
-                {/* Header */}
-                <div className="mb-8 border-b border-slate-200 pb-6">
-                    <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Configuración</h1>
-                    <p className="text-slate-500 mt-2 font-medium">Personaliza las opciones y catálogos de tu aplicación.</p>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 48px' }}>
+            <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+                <div style={{ marginBottom: 28, paddingBottom: 20, borderBottom: '1px solid var(--border-subtle)' }}>
+                    <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em' }}>
+                        Configuración
+                    </h1>
+                    <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--fg-3)', fontWeight: 500 }}>
+                        Personaliza las opciones y catálogos de tu aplicación.
+                    </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                    gap: 20,
+                }}>
                     <ConfigSection
                         {...sharedSectionProps}
                         title="Monedas"
@@ -841,8 +720,6 @@ export default function Settings() {
                         setInputValue={setNewAccount}
                         placeholder="Ej. Santander Débito"
                     />
-
-                    {/* New Specialized Category Section */}
                     <CategoryConfigSection
                         appConfig={appConfig}
                         saving={saving}

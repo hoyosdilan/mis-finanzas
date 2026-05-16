@@ -1,58 +1,56 @@
-export default function Header({ currentContext, onContextChange, onMenuToggle }) {
-    return (
-        <header className="glass-panel sticky top-0 z-40 px-6 py-3 flex items-center justify-between shadow-sm border-b border-white/40">
-            <div className="flex items-center gap-8">
-                <div className="flex items-center gap-3">
-                    <button
-                        className="md:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                        onClick={onMenuToggle}
-                    >
-                        <span className="material-symbols-outlined text-xl">menu</span>
-                    </button>
-                    <div className="hidden md:flex w-9 h-9 bg-gradient-to-tr from-primary to-secondary rounded-xl items-center justify-center text-white shadow-md">
-                        <span className="material-symbols-outlined text-xl">donut_small</span>
-                    </div>
-                    <div className="hidden md:block">
-                        <h1 className="text-base font-bold tracking-tight text-slate-800 leading-none">Mis Finanzas</h1>
-                        <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Dashboard Personal</p>
-                    </div>
-                </div>
-                <nav className="flex bg-slate-100/50 p-1 rounded-xl items-center gap-1">
-                    <label className="cursor-pointer">
-                        <input
-                            className="peer sr-only"
-                            name="context"
-                            type="radio"
-                            value="personal"
-                            checked={currentContext === 'personal'}
-                            onChange={() => onContextChange('personal')}
-                        />
-                        <div className="px-5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 transition-all peer-checked:bg-white peer-checked:text-slate-900 peer-checked:shadow-sm hover:text-slate-700">Personal</div>
-                    </label>
-                    <label className="cursor-pointer">
-                        <input
-                            className="peer sr-only"
-                            name="context"
-                            type="radio"
-                            value="unified"
-                            checked={currentContext === 'unified'}
-                            onChange={() => onContextChange('unified')}
-                        />
-                        <div className="px-5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 transition-all peer-checked:bg-primary peer-checked:text-slate-900 peer-checked:shadow-sm hover:text-slate-900">General</div>
-                    </label>
-                    <label className="cursor-pointer">
-                        <input
-                            className="peer sr-only"
-                            name="context"
-                            type="radio"
-                            value="business"
-                            checked={currentContext === 'business'}
-                            onChange={() => onContextChange('business')}
-                        />
-                        <div className="px-5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 transition-all peer-checked:bg-white peer-checked:text-slate-900 peer-checked:shadow-sm hover:text-slate-700">Negocio</div>
-                    </label>
-                </nav>
-            </div>
-        </header>
-    );
+import React from 'react';
+import { Icon, Segmented } from './ds/Primitives';
+
+export default function Header({ currentContext, onContextChange }) {
+  return (
+    <header style={{
+      position: 'sticky', top: 0, zIndex: 40,
+      background: 'rgba(251, 247, 238, 0.82)',
+      backdropFilter: 'blur(20px) saturate(140%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(140%)',
+      borderBottom: '1px solid rgba(31, 27, 20, 0.06)',
+    }}>
+      {/* Brand + actions row */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '12px 20px 0',
+      }}>
+        {/* Logo mark */}
+        <div style={{
+          width: 34, height: 34, borderRadius: 10,
+          background: 'var(--ink-800)', color: '#fff',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <Icon name="donut_small" size={18} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--fg-1)', lineHeight: 1.1, letterSpacing: '-0.01em' }}>
+            Mis Finanzas
+          </div>
+          <div style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: '0.14em',
+            textTransform: 'uppercase', color: 'var(--fg-4)', marginTop: 1,
+          }}>
+            Dashboard personal
+          </div>
+        </div>
+      </div>
+
+      {/* Context switcher */}
+      <div style={{ padding: '10px 20px 12px' }}>
+        <Segmented
+          size="sm"
+          value={currentContext}
+          onChange={onContextChange}
+          options={[
+            { value: 'personal', label: 'Personal' },
+            { value: 'unified',  label: 'General' },
+            { value: 'business', label: 'Negocio' },
+          ]}
+        />
+      </div>
+    </header>
+  );
 }
