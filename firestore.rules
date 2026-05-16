@@ -18,10 +18,16 @@ service cloud.firestore {
       allow update, delete: if isUserAllowed();
     }
 
-    // Rules for all other documents in the database
-    match /{document=**} {
-      // Only authenticated users inside the whitelist can access other financial data
-      allow read, write: if isUserAllowed();
+    // Rules for all other documents in the database.
+    // gmail_auth/ and processed_gmail_ids/ are excluded on purpose: they hold
+    // backend-only data (the Gmail OAuth token and processed email IDs) and
+    // must stay unreadable from the client. The Admin SDK used by the sync job
+    // bypasses security rules, so the backend can still read/write them.
+    match /{collectionId}/{document=**} {
+      // Only authenticated users inside the whitelist can access financial data
+      allow read, write: if isUserAllowed()
+                         && collectionId != 'gmail_auth'
+                         && collectionId != 'processed_gmail_ids';
     }
   }
 }

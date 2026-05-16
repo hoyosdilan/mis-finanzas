@@ -8,64 +8,92 @@ from bs4 import BeautifulSoup
 # Google API
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-# Firebase
-from utils import conectar_db
+# Gemini
+from google import genai
+from google.genai import types
 
-# Ollama
-try:
-    import ollama
-except ImportError:
-    print("❌ Error: La librería 'ollama' no está instalada. Ejecuta: pip install ollama")
-    exit(1)
+# Firebase
+from firebase_admin import firestore
+from utils import conectar_db
 
 # --- CONFIGURACIÓN ---
 # Permisos necesarios para leer labels y modificar (quitar) etiquetas
 GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
-CREDENTIALS_FILE = os.path.join(os.path.dirname(__file__), 'credentials.json')
-TOKEN_FILE = os.path.join(os.path.dirname(__file__), 'token.json')
-PROCESSED_FILE = os.path.join(os.path.dirname(__file__), 'processed_emails.txt')
-LOCK_FILE = os.path.join(os.path.dirname(__file__), 'gmail_sync.lock')
 
 # Etiqueta por defecto a buscar
-DEFAULT_LABEL = "Bancos/PendingBot" 
+DEFAULT_LABEL = "Bancos/PendingBot"
 
-def authenticate_gmail():
-    """Autentica con la API de Gmail y devuelve el servicio."""
-    creds = None
-    if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, GMAIL_SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+# Modelo de Gemini
+GEMINI_MODEL = "gemini-2.0-flash"
+
+# Documento de Firestore donde vive el token de OAuth de Gmail
+TOKEN_COLLECTION = 'gmail_auth'
+TOKEN_DOC = 'token'
+
+# Colección de Firestore con los IDs de correos ya procesados
+PROCESSED_COLLECTION = 'processed_gmail_ids'
+
+# Tamaño máximo de texto del correo enviado al modelo
+MAX_BODY_CHARS = 3500
+
+
+def _load_token(db):
+    """Lee el token de OAuth de Gmail desde Firestore."""
+    doc = db.collection(TOKEN_COLLECTION).document(TOKEN_DOC).get()
+    return doc.to_dict() if doc.exists else None
+
+
+def _save_token(db, token_info):
+    """Guarda (o actualiza) el token de OAuth de Gmail en Firestore."""
+    db.collection(TOKEN_COLLECTION).document(TOKEN_DOC).set(token_info)
+
+
+def authenticate_gmail(db):
+    """Autentica con la API de Gmail usando el token guardado en Firestore.
+
+    El token (con su refresh_token, client_id y client_secret) se siembra una
+    sola vez con bootstrap_token.py. Aquí solo se carga y, si está expirado, se
+    refresca y se vuelve a guardar en Firestore. No hay flujo interactivo: este
+    código corre sin navegador en GitHub Actions.
+    """
+    token_info = _load_token(db)
+    if not token_info:
+        raise RuntimeError(
+            f"No hay token de Gmail en Firestore ({TOKEN_COLLECTION}/{TOKEN_DOC}). "
+            "Ejecuta bootstrap_token.py una vez localmente para inicializarlo."
+        )
+
+    creds = Credentials.from_authorized_user_info(token_info, GMAIL_SCOPES)
+
+    if not creds.valid:
+        if creds.expired and creds.refresh_token:
+            print("🔄 Token expirado. Refrescando...")
             creds.refresh(Request())
+            _save_token(db, json.loads(creds.to_json()))
+            print("✅ Token refrescado y guardado en Firestore.")
         else:
-            if not os.path.exists(CREDENTIALS_FILE):
-                print(f"\n❌ FALTAN CREDENCIALES OAUTH 2.0")
-                print(f"El archivo {CREDENTIALS_FILE} no existe.")
-                print("1. Ve a Google Cloud Console")
-                print("2. Habilita la Gmail API")
-                print("3. Crea credenciales tipo 'Desktop App' (OAuth 2.0 Client IDs)")
-                print("4. Descarga el JSON y nómbralo credentials.json en esta misma carpeta.\n")
-                exit(1)
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, GMAIL_SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(TOKEN_FILE, 'w') as token:
-            token.write(creds.to_json())
+            raise RuntimeError(
+                "El token de Gmail no es válido y no se puede refrescar. "
+                "Genera un token.json nuevo localmente y vuelve a ejecutar "
+                "bootstrap_token.py."
+            )
+
     return build('gmail', 'v1', credentials=creds)
 
-def load_processed_emails():
-    """Carga los IDs de los correos ya procesados."""
-    if not os.path.exists(PROCESSED_FILE):
-        return set()
-    with open(PROCESSED_FILE, 'r') as f:
-        return set(line.strip() for line in f if line.strip())
 
-def save_processed_email(email_id):
-    """Guarda un ID de correo en la lista de procesados."""
-    with open(PROCESSED_FILE, 'a') as f:
-        f.write(f"{email_id}\n")
+def is_processed(db, email_id):
+    """Indica si un correo ya fue procesado anteriormente."""
+    return db.collection(PROCESSED_COLLECTION).document(email_id).get().exists
+
+
+def save_processed_email(db, email_id):
+    """Registra un correo como procesado en Firestore."""
+    db.collection(PROCESSED_COLLECTION).document(email_id).set({
+        'processedAt': firestore.SERVER_TIMESTAMP
+    })
+
 
 def get_label_id(service, label_name):
     """Busca el ID interno de Gmail correspondiente al nombre de una etiqueta."""
@@ -76,10 +104,11 @@ def get_label_id(service, label_name):
             return label['id']
     return None
 
+
 def extract_email_body(payload):
     """Extrae el texto del cuerpo del correo, limpiando HTML."""
     text_content = ""
-    
+
     # Función recursiva para buscar la parte de texto
     def get_text_from_parts(parts):
         nonlocal text_content
@@ -87,7 +116,7 @@ def extract_email_body(payload):
             mime_type = part.get("mimeType")
             body = part.get("body", {})
             data = body.get("data")
-            
+
             if mime_type == "text/plain" and data:
                 text_content += base64.urlsafe_b64decode(data).decode("utf-8")
             elif mime_type == "text/html" and data:
@@ -96,7 +125,7 @@ def extract_email_body(payload):
                 text_content += soup.get_text(separator="\n")
             elif "parts" in part:
                 get_text_from_parts(part["parts"])
-                
+
     if "parts" in payload:
         get_text_from_parts(payload["parts"])
     else:
@@ -111,111 +140,142 @@ def extract_email_body(payload):
                 text_content = soup.get_text(separator="\n")
             else:
                 text_content = decoded
-                
+
     return text_content.strip()
 
-def procesar_texto_con_ia(texto, model_name="lfm2:24b"):
-    """Procesar texto libre con IA local usando Ollama."""
-    print("🧠 Contactando a Firebase para obtener contexto...")
-    db = conectar_db()
-    
+
+def _prefetch_context(db):
+    """Trae desde Firestore el contexto necesario para el análisis:
+    árbol de categorías (con subcategorías), cuentas, monedas y las últimas
+    transacciones registradas (para inferir contexto y normalizar subcategoría).
+    """
     doc = db.collection('finance_settings').document('default').get()
-    categorias, cuentas, monedas = [], [], []
+    categorias_raw, cuentas, monedas = [], [], []
     if doc.exists:
         data = doc.to_dict()
-        categorias = data.get('categories', [])
-        # Extract just category names (categories may be objects with {name, subcategories})
-        categorias = [c['name'] if isinstance(c, dict) else c for c in categorias]
+        categorias_raw = data.get('categories', [])
         cuentas = data.get('accounts', [])
         monedas = data.get('currencies', [])
-        
-    prompt = f"""
-Eres un experto asistente financiero automatizado de lectura de recibos y correos.
-Extrae los datos de esta transacción descrita en el correo electrónico y devuelve ÚNICAMENTE un objeto JSON válido.
-Ignora firmas, saludos, o información legal/publicidad. Céntrate en la transacción (quién cobró y cuánto).
-Si es una notificación de correo donde TÚ pagaste, es type: debit.
-¡MUY IMPORTANTE!: Si el correo indica explícitamente que la transacción "no fue exitosa", fue "Rechazada", "Fallida", "No exitosa", "Declinada", etc., devuelve el type como "ignore".
+
+    # Normalizar categorías a {name, subcategories}
+    cat_tree = []
+    for c in categorias_raw:
+        if isinstance(c, dict):
+            cat_tree.append({
+                'name': c.get('name'),
+                'subcategories': c.get('subcategories', []),
+            })
+        else:
+            cat_tree.append({'name': c, 'subcategories': []})
+
+    # Últimas 20 transacciones (todas las categorías)
+    recientes = []
+    try:
+        docs = db.collection('finance_transactions') \
+            .order_by('date', direction=firestore.Query.DESCENDING) \
+            .limit(20).get()
+        for d in docs:
+            tx = d.to_dict()
+            recientes.append({
+                'title': tx.get('title'),
+                'category': tx.get('category'),
+                'subcategory': tx.get('subcategory', ''),
+                'context': tx.get('context', 'personal'),
+                'type': tx.get('type'),
+            })
+    except Exception as e:
+        print(f"⚠️ No se pudo traer el historial reciente: {e}")
+
+    return cat_tree, cuentas, monedas, recientes
+
+
+def procesar_texto_con_ia(texto, db, client):
+    """Analiza el correo con Gemini y devuelve la transacción enriquecida.
+
+    En una sola llamada extrae la transacción y la normaliza (categoría,
+    subcategoría y contexto), usando como contexto el árbol de categorías y el
+    historial reciente. Devuelve (datos, cat_tree).
+    """
+    print("🧠 Obteniendo contexto desde Firestore...")
+    cat_tree, cuentas, monedas, recientes = _prefetch_context(db)
+    nombres_categorias = [c['name'] for c in cat_tree]
+
+    prompt = f"""Eres un experto asistente financiero que lee correos de notificaciones bancarias.
+Extrae los datos de la transacción descrita en el correo y devuelve ÚNICAMENTE un objeto JSON válido.
+Ignora firmas, saludos, publicidad o información legal. Céntrate en la transacción (quién cobró y cuánto).
+Si el correo es una notificación de un pago que TÚ hiciste, type = 'debit'.
+¡MUY IMPORTANTE!: Si el correo indica que la transacción "no fue exitosa", fue "Rechazada", "Fallida", "No exitosa", "Declinada", etc., devuelve únicamente {{"type": "ignore"}}.
+
+Categorías disponibles (cada una con sus subcategorías válidas):
+{json.dumps(cat_tree, ensure_ascii=False, indent=2)}
+
+Cuentas/tarjetas disponibles: {cuentas}
+Monedas disponibles: {monedas}
+
+Historial de transacciones recientes (úsalo para inferir el contexto y normalizar la subcategoría):
+{json.dumps(recientes, ensure_ascii=False, indent=2)}
 
 Reglas para los campos:
-- type: 'debit' (gasto), 'credit' (ingreso), o 'ignore' (si la transacción falló o fue declinada).
-- amount: el monto numérico exacto (sin símbolos de moneda, asegúrate de que sea positivo).
+- type: 'debit' (gasto), 'credit' (ingreso) o 'ignore' (transacción fallida/declinada).
+- amount: el monto numérico exacto, positivo y sin símbolos de moneda.
 - title: un resumen muy corto del concepto/comercio.
-- currency: elige la opción correcta de {monedas} o usa 'COP' si el texto dice $, pesos, etc.
-- category: elige la opción correcta de {categorias} según la data del correo. Si no aplica ninguna, usa 'Otros'.
-- card: elige la opción correcta de {cuentas} según la data del correo.
-- context: usa 'personal' por defecto.
-- date: extrae la fecha EN LA QUE OCURRIÓ LA TRANSACCIÓN directamente desde el cuerpo del texto. Debe estar estrictamente en formato "YYYY-MM-DD".
-- comments: un mensaje breve descriptivo que resuma la transacción basada en el correo.
+- currency: elige una opción de {monedas}, o 'COP' si el texto usa $, pesos, etc.
+- category: elige una opción de {nombres_categorias}. Si no aplica ninguna, usa 'Otros'.
+- subcategory: elige una subcategoría VÁLIDA de la categoría que elegiste (ver lista de arriba). Si ninguna aplica o esa categoría no tiene subcategorías, usa "".
+- card: elige una opción de {cuentas} según la data del correo.
+- context: 'personal' o 'business'. Infiérelo del título, el correo y el historial; por defecto 'personal'.
+- date: la fecha EN LA QUE OCURRIÓ la transacción, extraída del cuerpo del correo, estrictamente en formato "YYYY-MM-DD".
+- comments: un mensaje breve y descriptivo que resuma la transacción.
 
 Texto del correo:
 "{texto}"
 
-Solo debes imprimir el código JSON directo, sin explicación ni markdown. Formato esperado:
-{{
-  "type": "",
-  "amount": 0,
-  "title": "",
-  "currency": "",
-  "category": "",
-  "card": "",
-  "context": "",
-  "date": "",
-  "comments": ""
-}}
+Devuelve solo el JSON, sin explicación ni markdown. Formato esperado:
+{{"type": "", "amount": 0, "title": "", "currency": "", "category": "", "subcategory": "", "card": "", "context": "", "date": "", "comments": ""}}
 
-Si la transacción no fue exitosa:
-{{
-  "type": "ignore"
-}}
+Si la transacción no fue exitosa, devuelve únicamente:
+{{"type": "ignore"}}
 """
-    print(f"🧠 Analizando correo con IA local ({model_name})...")
-    try:
-        respuesta = ollama.chat(model=model_name, messages=[
-            {'role': 'system', 'content': 'Solo respondes con formato JSON válido.'},
-            {'role': 'user', 'content': prompt}
-        ])
-        
-        contenido = respuesta['message']['content'].strip()
-        
-        # Limpieza básica
-        if contenido.startswith("```json"):
-            contenido = contenido.replace("```json", "", 1)
-        if contenido.endswith("```"):
-            contenido = contenido[:contenido.rfind("```")]
-        
-        datos_extraidos = json.loads(contenido.strip())
-        print("✅ Análisis JSON completado con éxito.")
-        return datos_extraidos
-    except Exception as e:
-        print(f"\n❌ Error analizando o interpretando respuesta de IA: {e}")
-        return None
 
-def registrar_transaccion(datos_ia, fallback_date, model_name="lfm2:24b"):
-    """Guardar la transacción extraída por la IA en Firestore."""
-    from utils import mejorar_transaccion_con_historial
-    db = conectar_db()
-    
+    print(f"🧠 Analizando correo con Gemini ({GEMINI_MODEL})...")
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction="Eres un asistente financiero. Respondes únicamente con un objeto JSON válido.",
+                response_mime_type="application/json",
+                temperature=0,
+            ),
+        )
+        datos_extraidos = json.loads(response.text)
+        print("✅ Análisis JSON completado con éxito.")
+        return datos_extraidos, cat_tree
+    except Exception as e:
+        print(f"\n❌ Error analizando o interpretando la respuesta de Gemini: {e}")
+        return None, cat_tree
+
+
+def registrar_transaccion(datos_ia, fallback_date, db, cat_tree):
+    """Guarda la transacción extraída por la IA en Firestore."""
     # Manejar transacciones declinadas
     if datos_ia.get('type') == 'ignore':
         print("⏭️ La IA determinó que la transacción fue fallida o declinada. Ignorando guardado.")
-        return True # Devolvemos True para que de todas formas le quite la etiqueta de Gmail
+        return True  # Devolvemos True para que de todas formas se quite la etiqueta
 
     # Usar la fecha extraída por la IA, o el fallback (fecha de recepción del correo)
     tx_date = fallback_date
     tx_date_str = datos_ia.get('date')
-
     if tx_date_str:
         try:
             if "T" in tx_date_str:
                 tx_date_str = tx_date_str.split("T")[0]
             elif " " in tx_date_str:
                 tx_date_str = tx_date_str.split(" ")[0]
-                
-            # Verificar que el formato sea correcto
             datetime.datetime.strptime(tx_date_str, "%Y-%m-%d")
             tx_date = tx_date_str
-        except ValueError:
-            pass # Si la IA devolvió algo raro, usamos el fallback_date
+        except (ValueError, TypeError):
+            pass  # Si la IA devolvió algo raro, usamos el fallback_date
 
     # Sanitizar category: la IA puede devolver un objeto en vez de string
     raw_category = datos_ia.get('category', 'general')
@@ -223,146 +283,141 @@ def registrar_transaccion(datos_ia, fallback_date, model_name="lfm2:24b"):
         raw_category = raw_category.get('name', 'general')
     category = str(raw_category) if raw_category else 'general'
 
-    # Rellenar valores por defecto para no romper el esquema
+    # Validar subcategory contra las subcategorías válidas de la categoría elegida
+    subcategory = datos_ia.get('subcategory', '') or ''
+    valid_subs = []
+    for c in cat_tree:
+        if c['name'] == category:
+            valid_subs = c.get('subcategories', [])
+            break
+    if subcategory and valid_subs and subcategory not in valid_subs:
+        print(f"⚠️ La IA devolvió la subcategoría '{subcategory}', inválida para '{category}'. Se ignora.")
+        subcategory = ''
+
+    # Validar context
+    context = datos_ia.get('context', 'personal')
+    if context not in ('personal', 'business'):
+        print(f"⚠️ La IA devolvió un contexto inválido '{context}'. Se usa 'personal'.")
+        context = 'personal'
+
     nueva_transaccion = {
         "type": datos_ia.get('type', 'debit'),
         "amount": float(datos_ia.get('amount', 0)),
         "currency": datos_ia.get('currency', 'COP'),
         "title": datos_ia.get('title', 'Sin concepto especificado'),
         "category": category,
+        "subcategory": subcategory,
         "card": datos_ia.get('card', 'general'),
-        "comments": datos_ia.get('comments', "Importado automáticamente desde Gmail via IA"),
-        "context": datos_ia.get('context', 'personal'),
-        "date": tx_date
+        "comments": datos_ia.get('comments', "Importado automáticamente desde Gmail vía IA"),
+        "context": context,
+        "date": tx_date,
     }
 
     print("\n📦 Datos a guardar en Firebase:")
     for k, v in nueva_transaccion.items():
         print(f"   {k}: {v}")
-    
+
     try:
         _, doc_ref = db.collection('finance_transactions').add(nueva_transaccion)
         print(f"✅ Éxito: Registro guardado en Firebase (ID: {doc_ref.id})")
-        
-        # Mejorar título, subcategoría y contexto con IA
-        mejorar_transaccion_con_historial(db, doc_ref.id, nueva_transaccion, model_name=model_name)
-        
         return True
     except Exception as e:
         print(f"❌ Error al guardar en Firebase: {e}")
         return False
 
+
 def mark_as_processed(service, msg_id, label_id_to_remove):
     """Remueve la etiqueta del correo en Gmail."""
     try:
         service.users().messages().modify(
-            userId='me', 
-            id=msg_id, 
+            userId='me',
+            id=msg_id,
             body={'removeLabelIds': [label_id_to_remove]}
         ).execute()
         print(f"✅ Etiqueta removida del correo {msg_id}")
     except Exception as e:
         print(f"⚠️ Error intentando remover etiqueta: {e}")
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Automatización de Gmail a Firebase con LLM Local")
-    parser.add_argument('--label', default=DEFAULT_LABEL, help=f"Nombre de la etiqueta en Gmail (por defecto: '{DEFAULT_LABEL}')")
-    parser.add_argument('--model', default='lfm2:24b', help="Modelo de LLM a usar (por defecto: lfm2:24b)")
+    parser = argparse.ArgumentParser(description="Automatización de Gmail a Firestore con Gemini")
+    parser.add_argument('--label', default=DEFAULT_LABEL,
+                        help=f"Nombre de la etiqueta en Gmail (por defecto: '{DEFAULT_LABEL}')")
     args = parser.parse_args()
 
-    # --- Lock file: evitar ejecuciones simultáneas ---
-    if os.path.exists(LOCK_FILE):
-        try:
-            with open(LOCK_FILE, 'r') as f:
-                old_pid = int(f.read().strip())
-            os.kill(old_pid, 0)  # Chequear si el proceso sigue vivo
-            print(f"⏳ Ya hay un proceso de sync corriendo (PID: {old_pid}). Saliendo.")
-            return
-        except (ProcessLookupError, ValueError):
-            print("⚠️ Lock huérfano encontrado (proceso anterior murió). Limpiando...")
-            os.remove(LOCK_FILE)
+    gemini_key = os.environ.get('GEMINI_API_KEY')
+    if not gemini_key:
+        print("❌ Falta la variable de entorno GEMINI_API_KEY.")
+        raise SystemExit(1)
+    client = genai.Client(api_key=gemini_key)
 
-    # Crear lock file con nuestro PID
-    with open(LOCK_FILE, 'w') as f:
-        f.write(str(os.getpid()))
+    db = conectar_db()
 
-    try:
-        label_name = args.label
-        
-        # Verificando si existe la estructura basica
-        if not os.path.exists(PROCESSED_FILE):
-            open(PROCESSED_FILE, 'w').close()
+    print("🔑 Iniciando conexión con Gmail...")
+    service = authenticate_gmail(db)
 
-        print("🔑 Iniciando conexión con Gmail...")
-        service = authenticate_gmail()
-        
-        print(f"🔍 Buscando el ID interno para la etiqueta '{label_name}'...")
-        label_id = get_label_id(service, label_name)
-        
-        if not label_id:
-            print(f"❌ No se encontró la etiqueta '{label_name}' en tu cuenta de Gmail.")
-            print("Asegúrate de haberla creado en la interfaz de Gmail.")
-            return
+    label_name = args.label
+    print(f"🔍 Buscando el ID interno para la etiqueta '{label_name}'...")
+    label_id = get_label_id(service, label_name)
+    if not label_id:
+        print(f"❌ No se encontró la etiqueta '{label_name}' en tu cuenta de Gmail.")
+        print("Asegúrate de haberla creado en la interfaz de Gmail.")
+        return
+    print(f"✅ Etiqueta encontrada en servidor: {label_id}")
 
-        print(f"✅ Etiqueta encontrada en servidor: {label_id}")
-        
-        processed_emails = load_processed_emails()
-        
-        print(f"📫 Buscando correos con la etiqueta '{label_name}'...")
-        # Búsqueda por query
-        query = f"label:{label_name}"
-        results = service.users().messages().list(userId='me', q=query).execute()
-        messages = results.get('messages', [])
+    print(f"📫 Buscando correos con la etiqueta '{label_name}'...")
+    query = f"label:{label_name}"
+    results = service.users().messages().list(userId='me', q=query).execute()
+    messages = results.get('messages', [])
 
-        if not messages:
-            print("✅ No se encontraron correos pendientes para procesar.")
-            return
-            
-        for msg in messages:
-            msg_id = msg['id']
-            
-            if msg_id in processed_emails:
-                print(f"⏭️ El correo {msg_id} ya fue procesado pero sigue etiquetado. Intentando remover etiqueta y saltando...")
+    if not messages:
+        print("✅ No se encontraron correos pendientes para procesar.")
+        return
+
+    for msg in messages:
+        msg_id = msg['id']
+
+        if is_processed(db, msg_id):
+            print(f"⏭️ El correo {msg_id} ya fue procesado pero sigue etiquetado. Removiendo etiqueta...")
+            mark_as_processed(service, msg_id, label_id)
+            continue
+
+        print("\n" + "-" * 50)
+        print(f"📩 Procesando nuevo correo: {msg_id}")
+
+        # Descargar el correo completo
+        message_data = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+        payload = message_data.get('payload', {})
+
+        # Extraer fecha de recepción del correo (solo fecha, sin hora)
+        internal_date_ms = int(message_data.get('internalDate', 0))
+        fallback_date = (
+            datetime.datetime.fromtimestamp(internal_date_ms / 1000.0).strftime("%Y-%m-%d")
+            if internal_date_ms else datetime.datetime.now().strftime("%Y-%m-%d")
+        )
+
+        body_text = extract_email_body(payload)
+        if not body_text:
+            print(f"⚠️ No se pudo extraer texto legible del correo {msg_id}")
+            # Lo marcamos procesado de todas formas para no ciclar en correos vacíos
+            mark_as_processed(service, msg_id, label_id)
+            save_processed_email(db, msg_id)
+            continue
+
+        # Limitar el tamaño del texto enviado al modelo
+        truncated_text = body_text[:MAX_BODY_CHARS]
+        print(f"📄 Texto detectado (resumen): {truncated_text[:100].replace(chr(10), ' ')}...")
+
+        datos_ia, cat_tree = procesar_texto_con_ia(truncated_text, db, client)
+
+        if datos_ia:
+            success = registrar_transaccion(datos_ia, fallback_date, db, cat_tree)
+            if success:
                 mark_as_processed(service, msg_id, label_id)
-                continue
-                
-            print(f"\n" + "-"*50)
-            print(f"📩 Procesando nuevo correo: {msg_id}")
-            
-            # Descargar el correo completo
-            message_data = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
-            payload = message_data.get('payload', {})
-            
-            # Extraer fecha de recepción del correo (solo fecha, sin hora)
-            internal_date_ms = int(message_data.get('internalDate', 0))
-            fallback_date = datetime.datetime.fromtimestamp(internal_date_ms / 1000.0).strftime("%Y-%m-%d") if internal_date_ms else datetime.datetime.now().strftime("%Y-%m-%d")
-            
-            body_text = extract_email_body(payload)
-            
-            if not body_text:
-                print(f"⚠️ No se pudo extraer texto leíble del correo {msg_id}")
-                # Lo marcamos procesado de todas formas para no ciclar eternamente en correos vacíos
-                mark_as_processed(service, msg_id, label_id)
-                save_processed_email(msg_id)
-                continue
-                
-            # Para evitar enviar textos absurdamente gigantes a Ollama, limitamos el tamaño
-            truncated_text = body_text[:3500] 
-            print(f"📄 Texto detectado (resumen): {truncated_text[:100].replace(chr(10), ' ')}...")
-            
-            datos_ia = procesar_texto_con_ia(truncated_text, model_name=args.model)
-            
-            if datos_ia:
-                success = registrar_transaccion(datos_ia, fallback_date, model_name=args.model)
-                if success:
-                    mark_as_processed(service, msg_id, label_id)
-                    save_processed_email(msg_id)
-            else:
-                print(f"⚠️ El correo {msg_id} falló en la interpretación por IA. Se mantendrá la etiqueta para intentar luego.")
-    finally:
-        # SIEMPRE borrar el lock al salir (incluso si hay error)
-        if os.path.exists(LOCK_FILE):
-            os.remove(LOCK_FILE)
+                save_processed_email(db, msg_id)
+        else:
+            print(f"⚠️ El correo {msg_id} falló en la interpretación por IA. Se mantendrá la etiqueta para reintentar luego.")
+
 
 if __name__ == '__main__':
     main()
