@@ -74,8 +74,8 @@ export default function TransaccionDetalle({ txId, onBack, onEdit }) {
   const patternMax = Math.max(...stats.pattern.map(p => p.total), 1);
 
   const handleDuplicate = async () => {
-    const { id: _id, date: _d, ...rest } = tx;
-    await addTransaction(rest);
+    const { id: _id, date: _d, status: _s, ...rest } = tx;
+    await addTransaction({ ...rest, status: 'reviewed' });
     onBack();
   };
 

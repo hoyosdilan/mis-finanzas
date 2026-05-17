@@ -311,6 +311,9 @@ def registrar_transaccion(datos_ia, fallback_date, db, cat_tree):
         "comments": datos_ia.get('comments', "Importado automáticamente desde Gmail vía IA"),
         "context": context,
         "date": tx_date,
+        # Las transacciones importadas automáticamente requieren revisión
+        # manual en la app; se marcan como 'reviewed' al editarlas/guardarlas.
+        "status": "pending",
     }
 
     print("\n📦 Datos a guardar en Firebase:")

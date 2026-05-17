@@ -142,7 +142,7 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
             type: 'transfer', context: formData.context, destinationContext: formData.destinationContext,
             category: formData.category, subcategory: formData.subcategory,
             currency: formData.currency, card: formData.card, destinationCard: formData.destinationCard,
-            comments: formData.comments, date: txDate,
+            comments: formData.comments, date: txDate, status: 'reviewed',
           });
         } else {
           await addTransfer({
@@ -158,6 +158,7 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
           title: formData.title, amount: Number(formData.amount), type: formData.type,
           context: formData.context, category: formData.category, subcategory: formData.subcategory,
           currency: formData.currency, card: formData.card, comments: formData.comments, date: txDate,
+          status: 'reviewed', // saving (new or edit) clears the pending-review flag
         };
         if (editingTransaction) await updateTransaction(editingTransaction.id, txData);
         else await addTransaction(txData);

@@ -35,7 +35,7 @@ const filterInputStyle = {
   outline: 'none', width: '100%', boxSizing: 'border-box',
 };
 
-export default function Transactions({ currentContext, onNavigate }) {
+export default function Transactions({ currentContext, onNavigate, onEditTransaction }) {
   const { getTotals, deleteTransaction } = useFinance();
   const { filteredTransactions } = useMemo(() => getTotals(currentContext), [getTotals, currentContext]);
 
@@ -52,6 +52,7 @@ export default function Transactions({ currentContext, onNavigate }) {
   const [typeFilter, setTypeFilter]               = useState('');
   const [searchText, setSearchText]               = useState('');
   const [noSubcategoryOnly, setNoSubcategoryOnly] = useState(false);
+  const [pendingOnly, setPendingOnly] = useState(false);
   const [pageSize, setPageSize]     = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCurrency, setSelectedCurrency] = useState(null);
@@ -136,14 +137,16 @@ export default function Transactions({ currentContext, onNavigate }) {
       list = list.filter(t => (t.title || t.description || '').toLowerCase().includes(q) || (t.comments || '').toLowerCase().includes(q));
     }
     if (noSubcategoryOnly) list = list.filter(t => !t.subcategory);
+    if (pendingOnly) list = list.filter(t => t.status === 'pending');
     list.sort((a, b) => b.date.getTime() - a.date.getTime());
     return list;
-  }, [filteredTransactions, startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly]);
+  }, [filteredTransactions, startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pendingOnly]);
 
-  React.useEffect(() => { setCurrentPage(1); }, [startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pageSize]);
+  React.useEffect(() => { setCurrentPage(1); }, [startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pendingOnly, pageSize]);
 
   const paginatedTransactions = useMemo(() => processedTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize), [processedTransactions, currentPage, pageSize]);
   const totalPages = Math.ceil(processedTransactions.length / pageSize) || 1;
+  const pendingCount = useMemo(() => processedTransactions.filter(t => t.status === 'pending').length, [processedTransactions]);
 
   const chartData = useMemo(() => {
     const asc = [...processedTransactions].reverse();
@@ -205,7 +208,7 @@ export default function Transactions({ currentContext, onNavigate }) {
     setEndDate(format(new Date(), 'yyyy-MM-dd'));
     setCategoryFilter(''); setSubcategoryFilter(''); setAccountFilter('');
     setMinAmountFilter(''); setMaxAmountFilter(''); setTypeFilter('');
-    setSearchText(''); setNoSubcategoryOnly(false);
+    setSearchText(''); setNoSubcategoryOnly(false); setPendingOnly(false);
   };
 
   const txIcon = (tx) => {
@@ -399,6 +402,21 @@ export default function Transactions({ currentContext, onNavigate }) {
             </button>
             <button
               type="button"
+              onClick={() => setPendingOnly(v => !v)}
+              style={{
+                height: 38, padding: '0 12px', borderRadius: 10, cursor: 'pointer',
+                border: `1px solid ${pendingOnly ? 'var(--warning-500)' : 'var(--border-default)'}`,
+                background: pendingOnly ? 'var(--warning-50)' : 'var(--bg-default)',
+                color: pendingOnly ? 'var(--warning-700)' : 'var(--fg-3)',
+                fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Icon name={pendingOnly ? 'check_box' : 'check_box_outline_blank'} size={16} />
+              Por revisar
+            </button>
+            <button
+              type="button"
               onClick={clearFilters}
               style={{
                 height: 38, padding: '0 14px', borderRadius: 10, cursor: 'pointer',
@@ -475,10 +493,15 @@ export default function Transactions({ currentContext, onNavigate }) {
           padding: '14px 16px 12px',
           borderBottom: '1px solid var(--border-subtle)',
         }}>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg-1)' }}>
               {processedTransactions.length} transacciones
             </span>
+            {pendingCount > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning-700)' }}>
+                · {pendingCount} por revisar
+              </span>
+            )}
           </div>
           {/* Page size switcher */}
           <div style={{ display: 'flex', background: 'var(--bg-sunken)', padding: 3, borderRadius: 10, gap: 2 }}>
@@ -522,10 +545,14 @@ export default function Transactions({ currentContext, onNavigate }) {
                 return (
                   <tr
                     key={tx.id}
-                    onClick={() => onNavigate && onNavigate('transaccion', { txId: tx.id })}
-                    style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'background var(--dur-fast) var(--ease-out)' }}
+                    onClick={() => onEditTransaction && onEditTransaction(tx)}
+                    style={{
+                      borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer',
+                      transition: 'background var(--dur-fast) var(--ease-out)',
+                      background: tx.status === 'pending' ? 'var(--warning-50)' : 'transparent',
+                    }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--ink-50)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onMouseLeave={e => e.currentTarget.style.background = tx.status === 'pending' ? 'var(--warning-50)' : 'transparent'}
                   >
                     <td style={{ padding: '10px 16px' }}>
                       <IconTile icon={txIcon(tx)} hue={hue} size={32} />
@@ -534,8 +561,13 @@ export default function Transactions({ currentContext, onNavigate }) {
                       {format(tx.date, 'dd MMM yyyy', { locale: es })}
                     </td>
                     <td style={{ padding: '10px 16px' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--fg-1)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {tx.title || tx.description}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 700, color: 'var(--fg-1)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {tx.title || tx.description}
+                        </span>
+                        {tx.status === 'pending' && (
+                          <Pill variant="warning" icon="rate_review">Por revisar</Pill>
+                        )}
                       </div>
                       {tx.comments && <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{tx.comments}</div>}
                     </td>

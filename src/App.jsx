@@ -148,7 +148,7 @@ function AppContent() {
             className="pb-28 md:pb-8"
           >
             {currentView === 'insights'      && <Insights currentContext={context} onNavigate={navigate} onAddTransaction={openAddTransaction} />}
-            {currentView === 'transactions'  && <Transactions currentContext={context} onNavigate={navigate} />}
+            {currentView === 'transactions'  && <Transactions currentContext={context} onNavigate={navigate} onEditTransaction={openEditTransaction} />}
             {currentView === 'presupuestos'  && <Presupuestos currentContext={context} onNavigate={navigate} />}
             {currentView === 'settings'      && <Settings onNavigate={navigate} />}
             {currentView === 'categoria'     && <CategoriaDetalle currentContext={context} categoryName={viewParams?.category} onBack={goBack} onNavigate={navigate} />}
