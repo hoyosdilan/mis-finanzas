@@ -153,6 +153,7 @@ export const FinanceProvider = ({ children }) => {
 
             await addDoc(collection(db, 'finance_transactions'), {
                 date: defaultDateStr,
+                status: 'reviewed', // manual entries are reviewed; overridable via data
                 ...data,
             });
         } catch (error) {
@@ -182,6 +183,7 @@ export const FinanceProvider = ({ children }) => {
                 destinationCard: transferData.destinationAccount,
                 comments: transferData.comments || '',
                 date: transferData.date || defaultDateStr,
+                status: 'reviewed',
             });
         } catch (error) {
             console.error("Error adding transfer: ", error);

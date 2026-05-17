@@ -8,8 +8,14 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Transactions from './components/Transactions';
 import Presupuestos from './components/Presupuestos';
 import Insights from './components/Insights';
+import CategoriaDetalle from './components/CategoriaDetalle';
+import TransaccionDetalle from './components/TransaccionDetalle';
+import Nutricion from './components/Nutricion';
 import TransactionModal from './components/TransactionModal';
 import { Icon } from './components/ds/Primitives';
+
+// Pushed views reached from within a screen (not bottom-nav destinations)
+const DETAIL_VIEWS = ['categoria', 'transaccion', 'nutricion'];
 
 // Bottom tab bar — mobile only
 function TabBar({ active, onChange, onFab }) {
@@ -85,14 +91,35 @@ function AppContent() {
   const { currentUser } = useAuth();
   const [context, setContext] = useState('unified');
   const [currentView, setCurrentView] = useState('insights');
+  const [viewParams, setViewParams] = useState(null);
+  const [backView, setBackView] = useState('insights');
   const [isFABModalOpen, setIsFABModalOpen] = useState(false);
   const [fabModalMode, setFabModalMode] = useState('transaction');
+  const [editingTx, setEditingTx] = useState(null);
 
   if (!currentUser) {
     return <Login />;
   }
 
+  const isDetailView = DETAIL_VIEWS.includes(currentView);
+
+  const navigate = (view, params = null) => {
+    // Remember the origin screen when stepping into a detail view
+    if (DETAIL_VIEWS.includes(view) && !DETAIL_VIEWS.includes(currentView)) {
+      setBackView(currentView);
+    }
+    setCurrentView(view);
+    setViewParams(params);
+  };
+  const goBack = () => navigate(backView);
+
   const openAddTransaction = () => {
+    setEditingTx(null);
+    setFabModalMode('transaction');
+    setIsFABModalOpen(true);
+  };
+  const openEditTransaction = (tx) => {
+    setEditingTx(tx);
     setFabModalMode('transaction');
     setIsFABModalOpen(true);
   };
@@ -103,29 +130,30 @@ function AppContent() {
 
         {/* Desktop sidebar rail — hidden on mobile */}
         <div className="hidden md:block">
-          <Sidebar activeView={currentView} onNavigate={setCurrentView} />
+          <Sidebar activeView={currentView} onNavigate={navigate} />
         </div>
 
         {/* Main content area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
 
-          {/* Sticky glass header */}
-          <Header currentContext={context} onContextChange={setContext} />
+          {/* Sticky glass header — hidden on full-bleed detail views */}
+          {!isDetailView && <Header currentContext={context} onContextChange={setContext} />}
 
-          {/* Scrollable view content */}
+          {/* Scrollable view content — generous bottom pad clears the mobile tab bar + FAB */}
           <main style={{
             flex: 1,
             overflowY: 'auto',
             overflowX: 'hidden',
-            // Mobile: pad bottom for tab bar; desktop: no padding
-            paddingBottom: 'env(safe-area-inset-bottom)',
           }}
-            className="pb-24 md:pb-6"
+            className="pb-28 md:pb-8"
           >
-            {currentView === 'insights'      && <Insights currentContext={context} onNavigate={setCurrentView} onAddTransaction={openAddTransaction} />}
-            {currentView === 'transactions'  && <Transactions currentContext={context} />}
-            {currentView === 'presupuestos'  && <Presupuestos currentContext={context} />}
-            {currentView === 'settings'      && <Settings />}
+            {currentView === 'insights'      && <Insights currentContext={context} onNavigate={navigate} onAddTransaction={openAddTransaction} />}
+            {currentView === 'transactions'  && <Transactions currentContext={context} onNavigate={navigate} onEditTransaction={openEditTransaction} />}
+            {currentView === 'presupuestos'  && <Presupuestos currentContext={context} onNavigate={navigate} />}
+            {currentView === 'settings'      && <Settings onNavigate={navigate} />}
+            {currentView === 'categoria'     && <CategoriaDetalle currentContext={context} categoryName={viewParams?.category} onBack={goBack} onNavigate={navigate} />}
+            {currentView === 'transaccion'   && <TransaccionDetalle txId={viewParams?.txId} onBack={goBack} onEdit={openEditTransaction} />}
+            {currentView === 'nutricion'     && <Nutricion onBack={goBack} />}
           </main>
         </div>
 
@@ -176,15 +204,15 @@ function AppContent() {
         <div className="md:hidden">
           <TabBar
             active={currentView}
-            onChange={setCurrentView}
+            onChange={navigate}
             onFab={openAddTransaction}
           />
         </div>
 
         <TransactionModal
           isOpen={isFABModalOpen}
-          onClose={() => setIsFABModalOpen(false)}
-          editingTransaction={null}
+          onClose={() => { setIsFABModalOpen(false); setEditingTx(null); }}
+          editingTransaction={editingTx}
           initialMode={fabModalMode}
         />
       </div>

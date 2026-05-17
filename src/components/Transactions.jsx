@@ -3,7 +3,6 @@ import { useFinance } from '../context/FinanceContext';
 import { format, startOfYear, isWithinInterval, endOfDay, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { formatCurrency, formatCompactNumber } from '../utils/format';
-import TransactionModal from './TransactionModal';
 import ConfirmModal from './ConfirmModal';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -36,12 +35,10 @@ const filterInputStyle = {
   outline: 'none', width: '100%', boxSizing: 'border-box',
 };
 
-export default function Transactions({ currentContext }) {
+export default function Transactions({ currentContext, onNavigate, onEditTransaction }) {
   const { getTotals, deleteTransaction } = useFinance();
   const { filteredTransactions } = useMemo(() => getTotals(currentContext), [getTotals, currentContext]);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState({ isOpen: false, txId: null });
 
   // Filters
@@ -55,9 +52,52 @@ export default function Transactions({ currentContext }) {
   const [typeFilter, setTypeFilter]               = useState('');
   const [searchText, setSearchText]               = useState('');
   const [noSubcategoryOnly, setNoSubcategoryOnly] = useState(false);
+  const [pendingOnly, setPendingOnly] = useState(false);
   const [pageSize, setPageSize]     = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCurrency, setSelectedCurrency] = useState(null);
+
+  // ── Month overview (MovimientosB hero) ───────────────────────────────
+  const today = useMemo(() => new Date(), []);
+  const monthInfo = useMemo(() => {
+    const y = today.getFullYear(), m = today.getMonth();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const todayDay = today.getDate();
+    const days = new Array(daysInMonth).fill(0);
+    const pm = m === 0 ? 11 : m - 1;
+    const pmy = m === 0 ? y - 1 : y;
+    let monthTotal = 0, prevTotal = 0;
+    filteredTransactions.forEach(t => {
+      if (t.type !== 'debit' || t.isTransfer) return;
+      const d = t.date instanceof Date ? t.date : new Date(t.date);
+      const amt = Number(t.amount) || 0;
+      if (d.getFullYear() === y && d.getMonth() === m) {
+        days[d.getDate() - 1] += amt;
+        monthTotal += amt;
+      } else if (d.getFullYear() === pmy && d.getMonth() === pm && d.getDate() <= todayDay) {
+        prevTotal += amt;
+      }
+    });
+    return { y, m, daysInMonth, todayDay, days, monthTotal, prevTotal };
+  }, [filteredTransactions, today]);
+
+  const dayStr = (d) => `${monthInfo.y}-${String(monthInfo.m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const selectedDay = useMemo(() => {
+    if (startDate !== endDate) return null;
+    const d = new Date(startDate + 'T00:00:00');
+    if (d.getFullYear() === monthInfo.y && d.getMonth() === monthInfo.m) return d.getDate();
+    return null;
+  }, [startDate, endDate, monthInfo]);
+
+  const selectDay = (d) => {
+    if (selectedDay === d) {
+      setStartDate(dayStr(1));
+      setEndDate(format(new Date(), 'yyyy-MM-dd'));
+    } else {
+      setStartDate(dayStr(d));
+      setEndDate(dayStr(d));
+    }
+  };
 
   const uniqueCategories = useMemo(() => Array.from(new Set(filteredTransactions.map(t => t.category || 'General'))).sort(), [filteredTransactions]);
   const uniqueSubcategories = useMemo(() => {
@@ -97,14 +137,16 @@ export default function Transactions({ currentContext }) {
       list = list.filter(t => (t.title || t.description || '').toLowerCase().includes(q) || (t.comments || '').toLowerCase().includes(q));
     }
     if (noSubcategoryOnly) list = list.filter(t => !t.subcategory);
+    if (pendingOnly) list = list.filter(t => t.status === 'pending');
     list.sort((a, b) => b.date.getTime() - a.date.getTime());
     return list;
-  }, [filteredTransactions, startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly]);
+  }, [filteredTransactions, startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pendingOnly]);
 
-  React.useEffect(() => { setCurrentPage(1); }, [startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pageSize]);
+  React.useEffect(() => { setCurrentPage(1); }, [startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pendingOnly, pageSize]);
 
   const paginatedTransactions = useMemo(() => processedTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize), [processedTransactions, currentPage, pageSize]);
   const totalPages = Math.ceil(processedTransactions.length / pageSize) || 1;
+  const pendingCount = useMemo(() => processedTransactions.filter(t => t.status === 'pending').length, [processedTransactions]);
 
   const chartData = useMemo(() => {
     const asc = [...processedTransactions].reverse();
@@ -166,7 +208,7 @@ export default function Transactions({ currentContext }) {
     setEndDate(format(new Date(), 'yyyy-MM-dd'));
     setCategoryFilter(''); setSubcategoryFilter(''); setAccountFilter('');
     setMinAmountFilter(''); setMaxAmountFilter(''); setTypeFilter('');
-    setSearchText(''); setNoSubcategoryOnly(false);
+    setSearchText(''); setNoSubcategoryOnly(false); setPendingOnly(false);
   };
 
   const txIcon = (tx) => {
@@ -176,14 +218,104 @@ export default function Transactions({ currentContext }) {
     return map[tx.category] || 'payments';
   };
 
+  // Hero derived values
+  const monthDelta = monthInfo.prevTotal > 0
+    ? ((monthInfo.monthTotal - monthInfo.prevTotal) / monthInfo.prevTotal) * 100 : 0;
+  const avgDaily = monthInfo.todayDay > 0 ? monthInfo.monthTotal / monthInfo.todayDay : 0;
+  const todaySpend = monthInfo.days[monthInfo.todayDay - 1] || 0;
+  const maxDay = Math.max(...monthInfo.days, 1);
+  const underAvg = todaySpend <= avgDaily;
+
   return (
-    <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto', padding: '0 20px', paddingBottom: 32 }} className="animate-fade-up">
+    <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto', padding: '16px 16px 32px' }} className="animate-fade-up">
 
       {/* Page header */}
-      <div style={{ padding: '16px 0 16px' }}>
-        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em' }}>Movimientos</h1>
+      <div style={{ marginBottom: 14 }}>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em' }}>Movimientos</h1>
         <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--fg-3)' }}>Todo lo que entra y sale, en orden cronológico.</p>
       </div>
+
+      {/* Month spend hero — daily bar strip */}
+      <Card padding={16} style={{ marginBottom: 12, borderRadius: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+          <div>
+            <Eyebrow>Gastado este mes</Eyebrow>
+            <div style={{ marginTop: 6, fontSize: 26, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+              {monthInfo.monthTotal > 0 ? '−' : ''}{formatCurrency(monthInfo.monthTotal, 'COP')}
+            </div>
+          </div>
+          {monthInfo.prevTotal > 0 && (
+            <Pill variant={monthDelta > 0 ? 'warning' : 'success'} icon={monthDelta > 0 ? 'north_east' : 'south_east'}>
+              {monthDelta > 0 ? '+' : ''}{monthDelta.toFixed(0)}% vs. mes pasado
+            </Pill>
+          )}
+        </div>
+
+        {/* Daily bars */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 76 }}>
+          {monthInfo.days.map((v, i) => {
+            const d = i + 1;
+            const isSel = selectedDay === d;
+            const isFuture = d > monthInfo.todayDay;
+            const dow = new Date(monthInfo.y, monthInfo.m, d).getDay();
+            const weekend = dow === 0 || dow === 6;
+            const h = v === 0 ? 4 : Math.max(6, (v / maxDay) * 60);
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => selectDay(d)}
+                title={`${d}: ${formatCurrency(v, 'COP')}`}
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                  background: 'transparent', border: 'none', cursor: isFuture ? 'default' : 'pointer', padding: 0, minWidth: 0,
+                }}
+                disabled={isFuture}
+              >
+                <div style={{
+                  width: '100%', height: h, borderRadius: 3,
+                  background: isSel ? 'var(--clay-500)'
+                    : isFuture ? 'var(--parchment-100)'
+                    : weekend ? 'var(--parchment-300)' : 'var(--parchment-200)',
+                  transition: 'background var(--dur-fast) var(--ease-out)',
+                }} />
+                <span style={{
+                  fontSize: 8, fontWeight: isSel ? 800 : 600,
+                  color: isSel ? 'var(--clay-700)' : 'var(--fg-4)',
+                }}>
+                  {d}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--fg-3)' }}>
+          {selectedDay
+            ? <>Mostrando el <strong style={{ color: 'var(--fg-1)' }}>día {selectedDay}</strong> — toca de nuevo para ver el mes.</>
+            : <>Toca un día para filtrar la tabla. Promedio diario <strong style={{ color: 'var(--fg-1)' }}>{formatCurrency(Math.round(avgDaily), 'COP')}</strong>.</>}
+        </div>
+      </Card>
+
+      {/* Day pace insight */}
+      {monthInfo.monthTotal > 0 && (
+        <Card
+          padding={14}
+          style={{
+            marginBottom: 20,
+            background: underAvg ? 'var(--olive-50)' : 'var(--amber-50)',
+            borderLeft: `4px solid ${underAvg ? 'var(--olive-500)' : 'var(--amber-300)'}`,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Icon name={underAvg ? 'check_circle' : 'trending_up'} size={20} color={underAvg ? 'var(--olive-600)' : 'var(--amber-400)'} />
+            <div style={{ fontSize: 12.5, color: 'var(--ink-600)', lineHeight: 1.45 }}>
+              {underAvg
+                ? <>Hoy vas <strong>{formatCurrency(Math.round(avgDaily - todaySpend), 'COP')}</strong> por debajo de tu promedio diario. Sigue así.</>
+                : <>Hoy gastaste <strong>{formatCurrency(Math.round(todaySpend - avgDaily), 'COP')}</strong> por encima de tu promedio diario.</>}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Filter panel */}
       <Card padding={16} style={{ marginBottom: 20 }}>
@@ -270,6 +402,21 @@ export default function Transactions({ currentContext }) {
             </button>
             <button
               type="button"
+              onClick={() => setPendingOnly(v => !v)}
+              style={{
+                height: 38, padding: '0 12px', borderRadius: 10, cursor: 'pointer',
+                border: `1px solid ${pendingOnly ? 'var(--warning-500)' : 'var(--border-default)'}`,
+                background: pendingOnly ? 'var(--warning-50)' : 'var(--bg-default)',
+                color: pendingOnly ? 'var(--warning-700)' : 'var(--fg-3)',
+                fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              <Icon name={pendingOnly ? 'check_box' : 'check_box_outline_blank'} size={16} />
+              Por revisar
+            </button>
+            <button
+              type="button"
               onClick={clearFilters}
               style={{
                 height: 38, padding: '0 14px', borderRadius: 10, cursor: 'pointer',
@@ -346,10 +493,15 @@ export default function Transactions({ currentContext }) {
           padding: '14px 16px 12px',
           borderBottom: '1px solid var(--border-subtle)',
         }}>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg-1)' }}>
               {processedTransactions.length} transacciones
             </span>
+            {pendingCount > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--warning-700)' }}>
+                · {pendingCount} por revisar
+              </span>
+            )}
           </div>
           {/* Page size switcher */}
           <div style={{ display: 'flex', background: 'var(--bg-sunken)', padding: 3, borderRadius: 10, gap: 2 }}>
@@ -370,7 +522,7 @@ export default function Transactions({ currentContext }) {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Table — kept wide, scrolls horizontally on mobile */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
@@ -393,10 +545,14 @@ export default function Transactions({ currentContext }) {
                 return (
                   <tr
                     key={tx.id}
-                    onClick={() => { setEditingTransaction(tx); setIsModalOpen(true); }}
-                    style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer', transition: 'background var(--dur-fast) var(--ease-out)' }}
+                    onClick={() => onEditTransaction && onEditTransaction(tx)}
+                    style={{
+                      borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer',
+                      transition: 'background var(--dur-fast) var(--ease-out)',
+                      background: tx.status === 'pending' ? 'var(--warning-50)' : 'transparent',
+                    }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--ink-50)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onMouseLeave={e => e.currentTarget.style.background = tx.status === 'pending' ? 'var(--warning-50)' : 'transparent'}
                   >
                     <td style={{ padding: '10px 16px' }}>
                       <IconTile icon={txIcon(tx)} hue={hue} size={32} />
@@ -405,8 +561,13 @@ export default function Transactions({ currentContext }) {
                       {format(tx.date, 'dd MMM yyyy', { locale: es })}
                     </td>
                     <td style={{ padding: '10px 16px' }}>
-                      <div style={{ fontWeight: 700, color: 'var(--fg-1)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {tx.title || tx.description}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 700, color: 'var(--fg-1)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {tx.title || tx.description}
+                        </span>
+                        {tx.status === 'pending' && (
+                          <Pill variant="warning" icon="rate_review">Por revisar</Pill>
+                        )}
                       </div>
                       {tx.comments && <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{tx.comments}</div>}
                     </td>
@@ -531,15 +692,25 @@ export default function Transactions({ currentContext }) {
                   {searchSummary.categories.map(cat => {
                     const hue = hueForCategory(cat.name);
                     return (
-                      <div key={cat.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                      <button
+                        key={cat.name}
+                        type="button"
+                        onClick={() => onNavigate && onNavigate('categoria', { category: cat.name })}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          gap: 8, fontSize: 12, width: '100%', background: 'transparent',
+                          border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left',
+                        }}
+                      >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                           <span style={{ width: 8, height: 8, borderRadius: 9999, background: hueColorVar(hue), flexShrink: 0 }} />
                           {cat.name}
                         </span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg-1)', marginLeft: 10, flexShrink: 0 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg-1)', flexShrink: 0 }}>
                           {formatCurrency(cat.amount, searchSummary.currency)}
                         </span>
-                      </div>
+                        <Icon name="chevron_right" size={14} color="var(--fg-4)" />
+                      </button>
                     );
                   })}
                 </div>
@@ -589,11 +760,6 @@ export default function Transactions({ currentContext }) {
         </>
       )}
 
-      <TransactionModal
-        isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setEditingTransaction(null); }}
-        editingTransaction={editingTransaction}
-      />
       <ConfirmModal
         isOpen={confirmDelete.isOpen}
         onClose={() => setConfirmDelete({ isOpen: false, txId: null })}

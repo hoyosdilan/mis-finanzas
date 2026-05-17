@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Icon } from './ds/Primitives';
+import { Icon, Donut, Editorial, IconTile, Pill, ProgressBar, SparkLine } from './ds/Primitives';
 
 export default function Login() {
   const { loginWithGoogle, loginError } = useAuth();
@@ -29,109 +29,184 @@ export default function Login() {
   return (
     <div style={{
       minHeight: '100dvh',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 24,
-      background: `
-        radial-gradient(900px 600px at 100% 0%, rgba(201, 88, 42, 0.12), transparent 60%),
-        radial-gradient(700px 500px at 0% 100%, rgba(94, 103, 56, 0.09), transparent 60%),
-        var(--bg-canvas)
-      `,
+      background: 'var(--ink-800)',
+      display: 'flex', justifyContent: 'center',
       position: 'relative', overflow: 'hidden',
     }}>
-      {/* Paper grain overlay */}
+      {/* Warm clay wash, top-right */}
       <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        backgroundImage: 'url(/src/assets/grain.svg)',
-        opacity: 0.03,
+        position: 'absolute', top: -120, right: -100, width: 420, height: 420,
+        borderRadius: '50%', pointerEvents: 'none',
+        background: 'radial-gradient(circle, rgba(216,111,66,0.40) 0%, rgba(216,111,66,0) 65%)',
       }} />
 
+      {/* Phone-width content column */}
       <div style={{
-        background: 'var(--bg-raised)',
-        border: '1px solid var(--border-default)',
-        padding: '40px 36px',
-        borderRadius: 'var(--r-3xl)',
-        boxShadow: 'var(--shadow-lg)',
-        width: '100%', maxWidth: 380,
+        width: '100%', maxWidth: 440,
+        padding: '32px 24px calc(28px + env(safe-area-inset-bottom))',
+        display: 'flex', flexDirection: 'column',
         position: 'relative', zIndex: 1,
+        color: 'var(--parchment-50)',
         animation: 'fadeUp var(--dur-slow) var(--ease-out)',
       }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Donut
+            size={28} thickness={6} gap={0.02}
+            segments={[
+              { value: 38, color: 'var(--clay-400)' },
+              { value: 22, color: 'var(--olive-300)' },
+              { value: 18, color: 'var(--amber-300)' },
+              { value: 22, color: 'var(--parchment-200)' },
+            ]}
+          />
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#fff' }}>Mis Finanzas</div>
+        </div>
 
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{
-            width: 56, height: 56,
-            background: 'var(--ink-800)', borderRadius: 18,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 16,
-            boxShadow: '0 8px 24px -6px rgba(31, 27, 20, 0.25)',
-          }}>
-            <Icon name="donut_small" size={28} color="#fff" />
-          </div>
-          <h1 style={{
-            margin: 0, fontSize: 26, fontWeight: 800, color: 'var(--fg-1)',
-            letterSpacing: '-0.02em', lineHeight: 1.1,
-          }}>
-            Mis Finanzas
-          </h1>
+        {/* Hero copy */}
+        <div style={{ marginTop: 36 }}>
+          <Editorial size={38} color="#fff" style={{ lineHeight: 1.0 }}>
+            Hey, ¿necesitas<br />
+            <span style={{ color: 'var(--clay-300)' }}>una radiografía?</span>
+          </Editorial>
           <p style={{
-            margin: '6px 0 0', fontSize: 13, color: 'var(--fg-3)',
-            fontWeight: 500,
+            margin: '14px 0 0', fontSize: 14, lineHeight: 1.55,
+            color: 'rgba(255,255,255,0.7)', maxWidth: 300,
           }}>
-            Dashboard personal
+            Personal y negocio, lado a lado. Sin trucos motivacionales — solo los
+            números que importan.
           </p>
+        </div>
+
+        {/* Floating product previews */}
+        <div style={{ position: 'relative', height: 348, margin: '24px 0 4px' }}>
+          {/* Balance */}
+          <div style={{
+            position: 'absolute', top: 4, left: 4, right: 52,
+            background: 'rgba(255,255,255,0.06)',
+            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 20, padding: '14px 16px',
+          }}>
+            <div style={{
+              fontSize: 10, fontWeight: 800, letterSpacing: '0.14em',
+              textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)',
+            }}>
+              Balance total
+            </div>
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{
+                fontSize: 22, fontWeight: 800, color: '#fff',
+                letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums',
+              }}>
+                16.073.490
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--clay-300)', fontWeight: 700 }}>
+                +12% este mes
+              </span>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <SparkLine
+                points={[40, 52, 46, 58, 62, 55, 68, 72, 80, 76, 84, 90]}
+                color="var(--clay-400)" height={30}
+              />
+            </div>
+          </div>
+
+          {/* Category */}
+          <div style={{
+            position: 'absolute', top: 132, left: 52, right: 0,
+            background: 'rgba(255,255,255,0.94)', color: 'var(--fg-1)',
+            borderRadius: 18, padding: '12px 14px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.34)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <IconTile icon="restaurant" hue="clay" size={36} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>Comida y salidas</div>
+                <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>32% del mes · $ 1.8M</div>
+              </div>
+              <Pill variant="warning">86%</Pill>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <ProgressBar value={86} max={100} height={6} />
+            </div>
+          </div>
+
+          {/* Streak */}
+          <div style={{
+            position: 'absolute', top: 252, left: 20, right: 64,
+            background: 'var(--clay-500)', color: '#fff',
+            borderRadius: 18, padding: '12px 14px',
+            boxShadow: '0 20px 40px rgba(201,88,42,0.42)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Icon name="local_fire_department" size={22} fill />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.85, fontWeight: 700 }}>Racha</div>
+                <div style={{
+                  fontSize: 17, fontWeight: 700,
+                  fontFamily: 'var(--font-display)', fontStyle: 'italic',
+                }}>
+                  14 días registrando
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {error && (
           <div style={{
-            background: 'var(--danger-50)', border: '1px solid rgba(177, 77, 58, 0.2)',
-            color: 'var(--danger-700)',
-            padding: '10px 14px', borderRadius: 12, marginBottom: 16,
+            background: 'rgba(177,77,58,0.18)', border: '1px solid rgba(177,77,58,0.32)',
+            color: '#F2C4B8', padding: '10px 14px', borderRadius: 12, marginBottom: 12,
             fontSize: 13, fontWeight: 600,
           }}>
             {error}
           </div>
         )}
 
+        {/* CTA */}
         <button
           type="button"
           onClick={handleLogin}
           disabled={loading}
           style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            padding: '13px 20px', borderRadius: 14, border: '1px solid var(--border-default)',
-            background: loading ? 'var(--bg-sunken)' : 'var(--bg-raised)',
-            color: 'var(--fg-1)', cursor: loading ? 'wait' : 'pointer',
-            fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 14,
-            boxShadow: 'var(--shadow-sm)',
-            transition: 'background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)',
-            opacity: loading ? 0.7 : 1,
+            height: 54, borderRadius: 14, border: 'none',
+            background: loading ? 'var(--clay-600)' : 'var(--clay-500)',
+            color: '#fff', cursor: loading ? 'wait' : 'pointer',
+            fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 15,
+            boxShadow: 'var(--shadow-clay)',
+            transition: 'transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out)',
           }}
-          onMouseEnter={e => { if (!loading) e.currentTarget.style.boxShadow = 'var(--shadow-md)'; }}
-          onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; }}
+          onMouseEnter={e => { if (!loading) e.currentTarget.style.transform = 'scale(1.02)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
         >
           {loading ? (
-            <Icon name="autorenew" size={18} color="var(--fg-3)" style={{ animation: 'spin 1s linear infinite' }} />
+            <Icon name="autorenew" size={20} style={{ animation: 'spin 1s linear infinite' }} />
           ) : (
-            <img
-              src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-              alt="Google"
-              style={{ width: 18, height: 18 }}
-            />
+            <span style={{
+              width: 22, height: 22, borderRadius: '50%', background: '#fff',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <img
+                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                alt="" style={{ width: 14, height: 14 }}
+              />
+            </span>
           )}
           {loading ? 'Conectando...' : 'Ingresar con Google'}
         </button>
 
         <p style={{
-          margin: '20px 0 0', fontSize: 11, color: 'var(--fg-4)',
+          margin: '14px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.5)',
           textAlign: 'center', lineHeight: 1.5,
         }}>
           Acceso restringido. Solo cuentas autorizadas.
         </p>
       </div>
 
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
