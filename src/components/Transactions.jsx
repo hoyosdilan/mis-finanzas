@@ -660,15 +660,25 @@ export default function Transactions({ currentContext, onNavigate }) {
                   {searchSummary.categories.map(cat => {
                     const hue = hueForCategory(cat.name);
                     return (
-                      <div key={cat.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                      <button
+                        key={cat.name}
+                        type="button"
+                        onClick={() => onNavigate && onNavigate('categoria', { category: cat.name })}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          gap: 8, fontSize: 12, width: '100%', background: 'transparent',
+                          border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left',
+                        }}
+                      >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                           <span style={{ width: 8, height: 8, borderRadius: 9999, background: hueColorVar(hue), flexShrink: 0 }} />
                           {cat.name}
                         </span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg-1)', marginLeft: 10, flexShrink: 0 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--fg-1)', flexShrink: 0 }}>
                           {formatCurrency(cat.amount, searchSummary.currency)}
                         </span>
-                      </div>
+                        <Icon name="chevron_right" size={14} color="var(--fg-4)" />
+                      </button>
                     );
                   })}
                 </div>

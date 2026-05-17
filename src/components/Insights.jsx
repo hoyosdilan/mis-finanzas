@@ -3,6 +3,7 @@ import { useFinance } from '../context/FinanceContext';
 import { formatCurrency, formatCompactNumber } from '../utils/format';
 import {
   Icon, Card, Pill, Eyebrow, Editorial, SectionHeader, BarChart,
+  hueForCategory, hueColorVar,
 } from './ds/Primitives';
 
 const EXCHANGE_RATE = 4100;
@@ -136,6 +137,22 @@ export default function Insights({ currentContext, onNavigate }) {
     return list;
   }, [filtered, month, year, monthAgg, today, onNavigate]);
 
+  // This-month spending grouped by category — entry point to the category heatmap
+  const categoryBreakdown = useMemo(() => {
+    const cats = {};
+    filtered.forEach(t => {
+      if (t.type !== 'debit' || isTransferTx(t)) return;
+      const d = txDate(t);
+      if (d.getMonth() !== month || d.getFullYear() !== year) return;
+      const name = t.category || 'General';
+      cats[name] = (cats[name] || 0) + toCOP(t);
+    });
+    const total = Object.values(cats).reduce((a, b) => a + b, 0);
+    return Object.entries(cats)
+      .sort(([, a], [, b]) => b - a)
+      .map(([name, amount]) => ({ name, amount, pct: total > 0 ? (amount / total) * 100 : 0 }));
+  }, [filtered, month, year]);
+
   const labels7 = useMemo(() => {
     const out = [];
     for (let i = 6; i >= 0; i--) {
@@ -156,6 +173,7 @@ export default function Insights({ currentContext, onNavigate }) {
   }
 
   const week7Total = last7.reduce((a, b) => a + b, 0);
+  const monthLabel = today.toLocaleDateString('es-CO', { month: 'long' });
 
   return (
     <div
@@ -296,6 +314,40 @@ export default function Insights({ currentContext, onNavigate }) {
           </Card>
         </div>
       </div>
+
+      {/* Por categoría — tap a row to open the category heatmap */}
+      {categoryBreakdown.length > 0 && (
+        <div>
+          <SectionHeader title="Por categoría" eyebrow={`${monthLabel} · toca para ver el detalle`} />
+          <Card padding={6} style={{ marginTop: 10 }}>
+            {categoryBreakdown.map(c => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => onNavigate && onNavigate('categoria', { category: c.name })}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 10px', background: 'transparent', border: 'none',
+                  cursor: 'pointer', textAlign: 'left', borderRadius: 12,
+                  transition: 'background var(--dur-fast) var(--ease-out)',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--ink-50)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={{ width: 10, height: 10, borderRadius: 3, background: hueColorVar(hueForCategory(c.name)), flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {c.name}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--fg-3)', fontFamily: 'var(--font-mono)' }}>{c.pct.toFixed(0)}%</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 12, color: 'var(--fg-1)' }}>
+                  {formatCurrency(c.amount, 'COP')}
+                </span>
+                <Icon name="chevron_right" size={16} color="var(--fg-3)" />
+              </button>
+            ))}
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
