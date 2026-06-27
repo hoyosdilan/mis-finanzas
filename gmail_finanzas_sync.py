@@ -19,6 +19,10 @@ from firebase_admin import firestore, messaging
 from utils import conectar_db
 
 # --- CONFIGURACIÓN ---
+# Zona horaria de Colombia (UTC-5 fijo; el país no usa horario de verano).
+# Offset fijo → no depende de tzdata del sistema, funciona igual en CI y local.
+BOGOTA = datetime.timezone(datetime.timedelta(hours=-5))
+
 # Permisos necesarios para leer labels y modificar (quitar) etiquetas
 GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
@@ -224,14 +228,13 @@ Reglas para los campos:
 - subcategory: elige una subcategoría VÁLIDA de la categoría que elegiste (ver lista de arriba). Si ninguna aplica o esa categoría no tiene subcategorías, usa "".
 - card: elige una opción de {cuentas} según la data del correo.
 - context: 'personal' o 'business'. Infiérelo del título, el correo y el historial; por defecto 'personal'.
-- date: la fecha EN LA QUE OCURRIÓ la transacción, extraída del cuerpo del correo, estrictamente en formato "YYYY-MM-DD".
 - comments: un mensaje breve y descriptivo que resuma la transacción.
 
 Texto del correo:
 "{texto}"
 
 Devuelve solo el JSON, sin explicación ni markdown. Formato esperado:
-{{"type": "", "amount": 0, "title": "", "currency": "", "category": "", "subcategory": "", "card": "", "context": "", "date": "", "comments": ""}}
+{{"type": "", "amount": 0, "title": "", "currency": "", "category": "", "subcategory": "", "card": "", "context": "", "comments": ""}}
 
 Si la transacción no fue exitosa, devuelve únicamente:
 {{"type": "ignore"}}
@@ -256,26 +259,20 @@ Si la transacción no fue exitosa, devuelve únicamente:
         return None, cat_tree
 
 
-def registrar_transaccion(datos_ia, fallback_date, db, cat_tree):
-    """Guarda la transacción extraída por la IA en Firestore."""
+def registrar_transaccion(datos_ia, tx_dt, db, cat_tree):
+    """Guarda la transacción extraída por la IA en Firestore.
+
+    `tx_dt` es el datetime (tz Colombia) del momento del correo bancario, que
+    usamos como verdad para la fecha Y la hora. No dependemos de la fecha que
+    extrae el LLM (poco fiable y propensa a confundir el día).
+    """
     # Manejar transacciones declinadas
     if datos_ia.get('type') == 'ignore':
         print("⏭️ La IA determinó que la transacción fue fallida o declinada. Ignorando guardado.")
         return True  # Devolvemos True para que de todas formas se quite la etiqueta
 
-    # Usar la fecha extraída por la IA, o el fallback (fecha de recepción del correo)
-    tx_date = fallback_date
-    tx_date_str = datos_ia.get('date')
-    if tx_date_str:
-        try:
-            if "T" in tx_date_str:
-                tx_date_str = tx_date_str.split("T")[0]
-            elif " " in tx_date_str:
-                tx_date_str = tx_date_str.split(" ")[0]
-            datetime.datetime.strptime(tx_date_str, "%Y-%m-%d")
-            tx_date = tx_date_str
-        except (ValueError, TypeError):
-            pass  # Si la IA devolvió algo raro, usamos el fallback_date
+    # Fecha (solo día) y timestamp (día + hora) derivados del correo, en hora local.
+    tx_date = tx_dt.strftime("%Y-%m-%d")
 
     # Sanitizar category: la IA puede devolver un objeto en vez de string
     raw_category = datos_ia.get('category', 'general')
@@ -311,6 +308,9 @@ def registrar_transaccion(datos_ia, fallback_date, db, cat_tree):
         "comments": datos_ia.get('comments', "Importado automáticamente desde Gmail vía IA"),
         "context": context,
         "date": tx_date,
+        # Momento real (día + hora) de la transacción, en hora local de Colombia.
+        # Se usa para ordenar; la UI no lo muestra. Firestore lo guarda como Timestamp.
+        "timestamp": tx_dt,
         # Las transacciones importadas automáticamente requieren revisión
         # manual en la app; se marcan como 'reviewed' al editarlas/guardarlas.
         "status": "pending",
@@ -448,11 +448,13 @@ def main():
         message_data = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
         payload = message_data.get('payload', {})
 
-        # Extraer fecha de recepción del correo (solo fecha, sin hora)
+        # Momento del correo (≈ momento de la transacción) en hora local de Colombia.
+        # internalDate viene en epoch ms UTC; lo convertimos a UTC-5 (Colombia no
+        # tiene horario de verano). De aquí salen la fecha y la hora que guardamos.
         internal_date_ms = int(message_data.get('internalDate', 0))
-        fallback_date = (
-            datetime.datetime.fromtimestamp(internal_date_ms / 1000.0).strftime("%Y-%m-%d")
-            if internal_date_ms else datetime.datetime.now().strftime("%Y-%m-%d")
+        tx_dt = (
+            datetime.datetime.fromtimestamp(internal_date_ms / 1000.0, tz=BOGOTA)
+            if internal_date_ms else datetime.datetime.now(BOGOTA)
         )
 
         body_text = extract_email_body(payload)
@@ -470,7 +472,7 @@ def main():
         datos_ia, cat_tree = procesar_texto_con_ia(truncated_text, db, client)
 
         if datos_ia:
-            success = registrar_transaccion(datos_ia, fallback_date, db, cat_tree)
+            success = registrar_transaccion(datos_ia, tx_dt, db, cat_tree)
             if success:
                 mark_as_processed(service, msg_id, label_id)
                 save_processed_email(db, msg_id)
