@@ -96,16 +96,29 @@ export const FinanceProvider = ({ children }) => {
                 const date = parseTransactionDate(data.date);
                 const category = normalizeCategory(data.category);
 
+                // sortAt = día del campo `date` (lo que se muestra) + hora real del
+                // `timestamp` (si existe). Así ordenamos por fecha Y hora sin afectar
+                // el día mostrado (incluye registros con fecha retroactiva).
+                let sortAt = date;
+                if (data.timestamp && typeof data.timestamp.toDate === 'function') {
+                    const ts = data.timestamp.toDate();
+                    sortAt = new Date(
+                        date.getFullYear(), date.getMonth(), date.getDate(),
+                        ts.getHours(), ts.getMinutes(), ts.getSeconds(), ts.getMilliseconds()
+                    );
+                }
+
                 return {
                     id: doc.id,
                     ...data,
                     category,
                     date,
+                    sortAt,
                 };
             });
 
-            // Sort by date descending
-            txs.sort((a, b) => b.date.getTime() - a.date.getTime());
+            // Ordenar por fecha+hora descendente (más reciente primero)
+            txs.sort((a, b) => b.sortAt.getTime() - a.sortAt.getTime());
             setTransactions(txs);
             setLoading(false);
         }, (error) => {
@@ -153,6 +166,7 @@ export const FinanceProvider = ({ children }) => {
 
             await addDoc(collection(db, 'finance_transactions'), {
                 date: defaultDateStr,
+                timestamp: Timestamp.now(), // momento de creación → orden por hora
                 status: 'reviewed', // manual entries are reviewed; overridable via data
                 ...data,
             });
@@ -183,6 +197,7 @@ export const FinanceProvider = ({ children }) => {
                 destinationCard: transferData.destinationAccount,
                 comments: transferData.comments || '',
                 date: transferData.date || defaultDateStr,
+                timestamp: Timestamp.now(),
                 status: 'reviewed',
             });
         } catch (error) {

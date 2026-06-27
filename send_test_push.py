@@ -101,6 +101,7 @@ def main():
             "comments": "Transacción de prueba — bórrala cuando termines (--cleanup)",
             "context": "personal",
             "date": datetime.date.today().isoformat(),
+            "timestamp": datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-5))),
             "status": "pending",
         }
         _, doc_ref = db.collection('finance_transactions').add(tx)

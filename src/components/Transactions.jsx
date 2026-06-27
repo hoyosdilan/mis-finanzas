@@ -138,7 +138,8 @@ export default function Transactions({ currentContext, onNavigate, onEditTransac
     }
     if (noSubcategoryOnly) list = list.filter(t => !t.subcategory);
     if (pendingOnly) list = list.filter(t => t.status === 'pending');
-    list.sort((a, b) => b.date.getTime() - a.date.getTime());
+    // Orden por fecha+hora (sortAt); fallback a date para registros antiguos sin timestamp
+    list.sort((a, b) => (b.sortAt || b.date).getTime() - (a.sortAt || a.date).getTime());
     return list;
   }, [filteredTransactions, startDate, endDate, categoryFilter, subcategoryFilter, accountFilter, minAmountFilter, maxAmountFilter, typeFilter, searchText, noSubcategoryOnly, pendingOnly]);
 
