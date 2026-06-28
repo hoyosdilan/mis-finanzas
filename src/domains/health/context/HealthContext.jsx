@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { db } from '../../../firebase';
 import {
     collection, onSnapshot, addDoc, doc, setDoc, getDoc,
-    Timestamp, deleteDoc, updateDoc, query, orderBy, limit,
+    Timestamp, deleteDoc, query, orderBy, limit,
 } from 'firebase/firestore';
 
 const HealthContext = createContext();

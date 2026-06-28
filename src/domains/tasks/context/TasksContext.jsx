@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../../../firebase';
 import {
-    collection, onSnapshot, addDoc, doc, setDoc,
+    collection, onSnapshot, addDoc, doc,
     Timestamp, deleteDoc, updateDoc, query, orderBy,
 } from 'firebase/firestore';
 

@@ -692,7 +692,7 @@ const NotificationsSection = ({ push }) => {
     );
 };
 
-export default function Settings({ onNavigate, push }) {
+export default function Settings({ push }) {
     const { appConfig, updateAppConfig } = useFinance();
     const { settings: healthSettings, updateSettings: updateHealthSettings } = useHealth();
     const { currentUser, logout } = useAuth();

@@ -9,7 +9,7 @@ export default function TaskListModal({ isOpen, onClose }) {
     const { addList } = useTasks();
     const [name, setName] = useState('');
     const [icon, setIcon] = useState('checklist');
-    const [color, setColor] = useState(COLORS[0]);
+    const [color] = useState(COLORS[0]);
     const [saving, setSaving] = useState(false);
 
     if (!isOpen) return null;

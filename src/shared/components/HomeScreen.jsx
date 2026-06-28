@@ -60,20 +60,17 @@ export default function HomeScreen({ onSwitchDomain }) {
 
     // Finance stats
     const { transactions } = useFinance();
-    const { monthSpent, totalBalance } = useMemo(() => {
+    const monthSpent = useMemo(() => {
         let spent = 0;
-        let balance = 0;
         transactions.forEach(t => {
             if (t.type === 'transfer' || t.isTransfer) return;
             if (t.currency !== 'COP' && t.currency !== undefined && t.currency !== 'COP') return;
             const d = t.date instanceof Date ? t.date : new Date(t.date);
-            const amt = toCOP(t);
             if (d.getMonth() === month && d.getFullYear() === year) {
-                if (t.type === 'debit') spent += amt;
+                if (t.type === 'debit') spent += toCOP(t);
             }
-            balance += t.type === 'credit' ? amt : -amt;
         });
-        return { monthSpent: spent, totalBalance: balance };
+        return spent;
     }, [transactions, month, year]);
 
     // Health stats

@@ -4,7 +4,7 @@ import { Icon, Card, Eyebrow, SectionHeader, ProgressBar, IconBtn } from '../../
 import FoodLogModal from './FoodLogModal';
 import WorkoutLogModal from './WorkoutLogModal';
 
-export default function HealthHome({ onBack }) {
+export default function HealthHome() {
     const { settings, todayFoodSummary, weightLogs, workoutLogs, loading } = useHealth();
     const [showFoodModal, setShowFoodModal] = useState(false);
     const [showWorkoutModal, setShowWorkoutModal] = useState(false);
