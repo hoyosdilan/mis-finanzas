@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTasks } from '../context/TasksContext';
 import { Icon, Card, Eyebrow, SectionHeader, IconBtn } from '../../../shared/ds/Primitives';
 import TaskList from './TaskList';
 import TaskListModal from './TaskListModal';
 
-export default function TasksHome() {
+export default function TasksHome({ fabTrigger }) {
     const { lists, items, pendingCount, loading } = useTasks();
     const [selectedListId, setSelectedListId] = useState(null);
     const [showListModal, setShowListModal] = useState(false);
+
+    useEffect(() => {
+        if (fabTrigger > 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setShowListModal(true);
+        }
+    }, [fabTrigger]);
 
     if (loading) {
         return (

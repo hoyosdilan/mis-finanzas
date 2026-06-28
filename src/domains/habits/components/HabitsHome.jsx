@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHabits } from '../context/HabitsContext';
 import { Icon, Card, Eyebrow, SectionHeader, IconBtn } from '../../../shared/ds/Primitives';
 import HabitModal from './HabitModal';
@@ -8,9 +8,16 @@ const todayStr = () => {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
 
-export default function HabitsHome() {
+export default function HabitsHome({ fabTrigger }) {
     const { habitStats, todayCompleted, bestStreak, loading, toggleLog, habits } = useHabits();
     const [showModal, setShowModal] = useState(false);
+
+    useEffect(() => {
+        if (fabTrigger > 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setShowModal(true);
+        }
+    }, [fabTrigger]);
     const today = todayStr();
 
     if (loading) {

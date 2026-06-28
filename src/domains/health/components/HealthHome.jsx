@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHealth } from '../context/HealthContext';
 import { Icon, Card, Eyebrow, SectionHeader, ProgressBar, IconBtn } from '../../../shared/ds/Primitives';
 import FoodLogModal from './FoodLogModal';
 import WorkoutLogModal from './WorkoutLogModal';
 
-export default function HealthHome() {
+export default function HealthHome({ fabTrigger }) {
     const { settings, todayFoodSummary, weightLogs, workoutLogs, loading } = useHealth();
     const [showFoodModal, setShowFoodModal] = useState(false);
     const [showWorkoutModal, setShowWorkoutModal] = useState(false);
+
+    useEffect(() => {
+        if (fabTrigger > 0) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setShowFoodModal(true);
+        }
+    }, [fabTrigger]);
 
     const latestWeight = weightLogs[0];
     const todayStr = (() => {

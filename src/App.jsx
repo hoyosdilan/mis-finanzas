@@ -46,6 +46,62 @@ const DOMAIN_DEFAULTS = {
   habits:  'habits',
 };
 
+// Sub-navigation tabs per domain (only domains with multiple views need this)
+const DOMAIN_TABS = {
+  finance: [
+    { view: 'insights',     icon: 'insights',      label: 'Radiografía' },
+    { view: 'transactions', icon: 'receipt_long',   label: 'Movimientos' },
+    { view: 'presupuestos', icon: 'savings',        label: 'Presupuestos' },
+  ],
+};
+
+// FAB appearance per domain
+const FAB_CONFIG = {
+  home:    { icon: 'add',                    color: 'var(--ink-800)' },
+  finance: { icon: 'add',                    color: 'var(--clay-500)' },
+  health:  { icon: 'restaurant',             color: 'var(--olive-600, #5E6738)' },
+  tasks:   { icon: 'add_task',               color: 'var(--ink-700)' },
+  habits:  { icon: 'local_fire_department',  color: 'var(--clay-500)' },
+};
+
+// Horizontal tab strip shown below the header when a domain has sub-views
+function DomainTabStrip({ domain, currentView, onNavigate }) {
+  const tabs = DOMAIN_TABS[domain];
+  if (!tabs) return null;
+  return (
+    <div style={{
+      display: 'flex', gap: 0, flexShrink: 0,
+      borderBottom: '1px solid var(--border-subtle)',
+      background: 'var(--bg-base)',
+      overflowX: 'auto',
+    }}>
+      {tabs.map(tab => {
+        const isActive = currentView === tab.view;
+        return (
+          <button
+            key={tab.view}
+            type="button"
+            onClick={() => onNavigate(tab.view)}
+            style={{
+              flex: '0 0 auto', border: 'none', background: 'transparent',
+              padding: '10px 18px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: isActive ? 800 : 600,
+              color: isActive ? 'var(--clay-600)' : 'var(--fg-3)',
+              borderBottom: isActive ? '2px solid var(--clay-500)' : '2px solid transparent',
+              transition: 'color var(--dur-fast) var(--ease-out)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <Icon name={tab.icon} size={15} fill={isActive} />
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Resolves a deep-link transaction ID using the in-memory cache first,
 // avoiding a Firestore round-trip when the app is already open and subscribed.
 function DeepLinkResolver({ currentUser, pendingEditId, setPendingEditId, openEditTransaction }) {
@@ -92,7 +148,7 @@ function DeepLinkResolver({ currentUser, pendingEditId, setPendingEditId, openEd
 }
 
 // Mobile tab bar — 4 items + FAB
-const TabBar = React.memo(function TabBar({ activeDomain, onHome, onFinance, onSettings, onFab }) {
+const TabBar = React.memo(function TabBar({ activeDomain, onHome, onFinance, onSettings, onFab, fabIcon, fabColor }) {
   const items = [
     { id: 'home',    icon: 'home',    label: 'Inicio',   onClick: onHome },
     { id: 'finance', icon: 'account_balance_wallet', label: 'Finanzas', onClick: onFinance },
@@ -122,15 +178,15 @@ const TabBar = React.memo(function TabBar({ activeDomain, onHome, onFinance, onS
                 onClick={onFab}
                 style={{
                   width: 52, height: 52, borderRadius: '50%', border: 'none',
-                  background: 'var(--clay-500)', color: '#fff', cursor: 'pointer',
+                  background: fabColor || 'var(--clay-500)', color: '#fff', cursor: 'pointer',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   marginTop: -22, boxShadow: 'var(--shadow-clay)',
-                  transition: 'transform var(--dur-fast) var(--ease-out)',
+                  transition: 'transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out)',
                 }}
                 onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.07)'}
                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
               >
-                <Icon name="add" size={24} />
+                <Icon name={fabIcon || 'add'} size={24} />
               </button>
             </div>
           );
@@ -170,6 +226,11 @@ function AppContent() {
   const [fabModalMode, setFabModalMode] = useState('transaction');
   const [editingTx, setEditingTx] = useState(null);
 
+  // Per-domain FAB triggers (increment to open the domain's creation modal)
+  const [healthFab, setHealthFab] = useState(0);
+  const [tasksFab, setTasksFab]   = useState(0);
+  const [habitsFab, setHabitsFab] = useState(0);
+
   // Deep-link: ?editTx=<id> from push notification
   const [pendingEditId, setPendingEditId] = useState(() => {
     if (typeof window === 'undefined') return null;
@@ -193,6 +254,13 @@ function AppContent() {
     setEditingTx(null);
     setFabModalMode('transaction');
     setIsFABModalOpen(true);
+  }, []);
+
+  const handleFab = useCallback((dom) => {
+    if (dom === 'finance') { setEditingTx(null); setFabModalMode('transaction'); setIsFABModalOpen(true); }
+    else if (dom === 'health')  setHealthFab(n => n + 1);
+    else if (dom === 'tasks')   setTasksFab(n => n + 1);
+    else if (dom === 'habits')  setHabitsFab(n => n + 1);
   }, []);
 
   const push = usePushNotifications(useCallback((payload) => {
@@ -276,6 +344,11 @@ function AppContent() {
                   />
                 )}
 
+                {/* Domain sub-navigation tabs (Finance: Radiografía/Movimientos/Presupuestos, etc.) */}
+                {!isDetailView && !isSettingsView && (
+                  <DomainTabStrip domain={domain} currentView={currentView} onNavigate={navigate} />
+                )}
+
                 {/* Scrollable content */}
                 <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }} className="pb-28 md:pb-8">
                   {/* Home */}
@@ -291,57 +364,67 @@ function AppContent() {
                   {domain === 'finance' && currentView === 'transaccion'   && <TransaccionDetalle txId={viewParams?.txId} onBack={goBack} onEdit={openEditTransaction} />}
 
                   {/* Other domains */}
-                  {domain === 'health'  && <HealthHome onBack={() => switchDomain('home')} />}
-                  {domain === 'tasks'   && <TasksHome />}
-                  {domain === 'habits'  && <HabitsHome />}
+                  {domain === 'health'  && <HealthHome fabTrigger={healthFab} />}
+                  {domain === 'tasks'   && <TasksHome  fabTrigger={tasksFab} />}
+                  {domain === 'habits'  && <HabitsHome fabTrigger={habitsFab} />}
 
                   {/* Settings — accessible from any domain */}
                   {isSettingsView && <Settings onNavigate={navigate} push={push} />}
                 </main>
               </div>
 
-              {/* Desktop FAB stack */}
-              <div className="hidden md:flex" style={{
-                position: 'fixed', right: 28, bottom: 28,
-                flexDirection: 'column', gap: 10, zIndex: 50,
-              }}>
-                <button
-                  type="button"
-                  onClick={() => { setFabModalMode('transfer'); setIsFABModalOpen(true); }}
-                  style={{
-                    height: 44, padding: '0 16px 0 12px', gap: 7, borderRadius: 9999,
-                    border: 'none', cursor: 'pointer',
-                    background: 'var(--ink-700)', color: '#fff',
-                    boxShadow: '0 8px 24px -6px rgba(31,27,20,0.30)',
-                    display: 'inline-flex', alignItems: 'center',
-                    fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12,
-                    transition: 'transform var(--dur-fast) var(--ease-out)',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  <Icon name="swap_horiz" size={18} />
-                  Transferir
-                </button>
-                <button
-                  type="button"
-                  onClick={openAddTransaction}
-                  style={{
-                    height: 52, padding: '0 20px 0 16px', gap: 8, borderRadius: 9999,
-                    border: 'none', cursor: 'pointer',
-                    background: 'var(--clay-500)', color: '#fff',
-                    boxShadow: 'var(--shadow-clay)',
-                    display: 'inline-flex', alignItems: 'center',
-                    fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 13,
-                    transition: 'transform var(--dur-fast) var(--ease-out)',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.background = 'var(--clay-600)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'var(--clay-500)'; }}
-                >
-                  <Icon name="add" size={22} />
-                  Agregar transacción
-                </button>
-              </div>
+              {/* Desktop FAB — context-aware per domain */}
+              {!isSettingsView && (
+                <div className="hidden md:flex" style={{
+                  position: 'fixed', right: 28, bottom: 28,
+                  flexDirection: 'column', gap: 10, zIndex: 50,
+                }}>
+                  {domain === 'finance' && (
+                    <button
+                      type="button"
+                      onClick={() => { setFabModalMode('transfer'); setIsFABModalOpen(true); }}
+                      style={{
+                        height: 44, padding: '0 16px 0 12px', gap: 7, borderRadius: 9999,
+                        border: 'none', cursor: 'pointer',
+                        background: 'var(--ink-700)', color: '#fff',
+                        boxShadow: '0 8px 24px -6px rgba(31,27,20,0.30)',
+                        display: 'inline-flex', alignItems: 'center',
+                        fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12,
+                        transition: 'transform var(--dur-fast) var(--ease-out)',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      <Icon name="swap_horiz" size={18} />
+                      Transferir
+                    </button>
+                  )}
+                  {domain !== 'home' && (() => {
+                    const fab = FAB_CONFIG[domain] || FAB_CONFIG.finance;
+                    const LABELS = { finance: 'Agregar transacción', health: 'Registrar comida', tasks: 'Nueva lista', habits: 'Nuevo hábito' };
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleFab(domain)}
+                        style={{
+                          height: 52, padding: '0 20px 0 16px', gap: 8, borderRadius: 9999,
+                          border: 'none', cursor: 'pointer',
+                          background: fab.color, color: '#fff',
+                          boxShadow: 'var(--shadow-clay)',
+                          display: 'inline-flex', alignItems: 'center',
+                          fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 13,
+                          transition: 'transform var(--dur-fast) var(--ease-out)',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        <Icon name={fab.icon} size={22} />
+                        {LABELS[domain]}
+                      </button>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* Mobile tab bar */}
               <div className="md:hidden">
@@ -350,7 +433,9 @@ function AppContent() {
                   onHome={() => switchDomain('home')}
                   onFinance={() => switchDomain('finance')}
                   onSettings={() => navigate('settings')}
-                  onFab={openAddTransaction}
+                  onFab={() => handleFab(domain)}
+                  fabIcon={(FAB_CONFIG[domain] || FAB_CONFIG.finance).icon}
+                  fabColor={(FAB_CONFIG[domain] || FAB_CONFIG.finance).color}
                 />
               </div>
 
