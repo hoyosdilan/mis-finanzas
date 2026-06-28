@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { Icon, Donut, Editorial, IconTile, Pill, ProgressBar, SparkLine } from './ds/Primitives';
+import { useAuth } from '../../context/AuthContext';
+import { Icon, Donut, Editorial, IconTile, Pill, ProgressBar, SparkLine } from '../ds/Primitives';
 
 export default function Login() {
   const { loginWithGoogle, loginError } = useAuth();

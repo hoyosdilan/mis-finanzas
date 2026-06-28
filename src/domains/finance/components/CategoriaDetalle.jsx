@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { formatCurrency } from '../utils/format';
-import { Icon, Card, Eyebrow, IconBtn, IconTile, ProgressBar } from './ds/Primitives';
+import { formatCurrency } from '../../../shared/utils/format';
+import { Icon, Card, Eyebrow, IconBtn, IconTile, ProgressBar } from '../../../shared/ds/Primitives';
 
 const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export default function CategoriaDetalle({ categoryName, currentContext, onBack }) {
-  const { transactions, appConfig } = useFinance();
+export default function CategoriaDetalle({ categoryName, onBack }) {
+  const { transactions, appConfig, currentContext } = useFinance();
   const today = useMemo(() => new Date(), []);
   const y = today.getFullYear();
   const m = today.getMonth();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon } from './ds/Primitives';
+import { Icon } from '../ds/Primitives';
 
 export default function ConfirmModal({
     isOpen, onClose, onConfirm,

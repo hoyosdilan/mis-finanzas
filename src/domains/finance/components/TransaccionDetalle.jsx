@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { formatCurrency } from '../utils/format';
-import ConfirmModal from './ConfirmModal';
-import { Icon, Card, Eyebrow, Pill, SectionHeader } from './ds/Primitives';
+import { formatCurrency } from '../../../shared/utils/format';
+import ConfirmModal from '../../../shared/components/ConfirmModal';
+import { Icon, Card, Eyebrow, Pill, SectionHeader } from '../../../shared/ds/Primitives';
 
 const CAT_ICONS = {
   food: 'restaurant', software: 'code', services: 'home_repair_service',

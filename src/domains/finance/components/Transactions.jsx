@@ -2,11 +2,12 @@ import React, { useState, useMemo, useCallback, useDeferredValue, Suspense } fro
 import { useFinance } from '../context/FinanceContext';
 import { format, startOfYear, isWithinInterval, endOfDay, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { formatCurrency } from '../utils/format';
-import ConfirmModal from './ConfirmModal';
+import { formatCurrency } from '../../../shared/utils/format';
+import ConfirmModal from '../../../shared/components/ConfirmModal';
 import {
   Icon, Card, Pill, IconTile, Eyebrow, hueForCategory, hueColorVar
-} from './ds/Primitives';
+} from '../../../shared/ds/Primitives';
+import ContextSwitcher from './ContextSwitcher';
 
 const LazyBalanceChart = React.lazy(() => import('./BalanceChart'));
 
@@ -26,8 +27,8 @@ const filterInputStyle = {
   outline: 'none', width: '100%', boxSizing: 'border-box',
 };
 
-export default function Transactions({ currentContext, onNavigate, onEditTransaction }) {
-  const { getTotals, deleteTransaction } = useFinance();
+export default function Transactions({ onNavigate, onEditTransaction }) {
+  const { getTotals, deleteTransaction, currentContext } = useFinance();
   const { filteredTransactions } = useMemo(() => getTotals(currentContext), [getTotals, currentContext]);
 
   const [confirmDelete, setConfirmDelete] = useState({ isOpen: false, txId: null });
@@ -220,7 +221,9 @@ export default function Transactions({ currentContext, onNavigate, onEditTransac
   const underAvg = todaySpend <= avgDaily;
 
   return (
-    <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto', padding: '16px 16px 32px' }} className="animate-fade-up">
+    <>
+      <ContextSwitcher />
+    <div style={{ maxWidth: 'var(--content-max)', margin: '0 auto', padding: '0 16px 32px' }} className="animate-fade-up">
 
       {/* Page header */}
       <div style={{ marginBottom: 14 }}>
@@ -726,5 +729,6 @@ export default function Transactions({ currentContext, onNavigate, onEditTransac
         isDestructive
       />
     </div>
+    </>
   );
 }

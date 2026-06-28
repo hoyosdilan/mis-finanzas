@@ -2,7 +2,7 @@ import React from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { formatCurrency, formatCompactNumber } from '../utils/format';
+import { formatCurrency, formatCompactNumber } from '../../../shared/utils/format';
 
 const CURRENCY_COLORS = {
   COP: '#C9582A',
