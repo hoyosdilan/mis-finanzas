@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useFinance } from '../context/FinanceContext';
+import { useHealth } from '../domains/health/context/HealthContext';
 import { useAuth } from '../context/AuthContext';
-import { Icon, Card, Eyebrow, IconTile } from './ds/Primitives';
-import ConfirmModal from './ConfirmModal';
+import { Icon, Card, Eyebrow, IconTile, Segmented } from '../shared/ds/Primitives';
+import ConfirmModal from '../shared/components/ConfirmModal';
 
 const INPUT_STYLE = {
     flex: 1, padding: '9px 12px',
@@ -693,10 +694,34 @@ const NotificationsSection = ({ push }) => {
 
 export default function Settings({ onNavigate, push }) {
     const { appConfig, updateAppConfig } = useFinance();
+    const { settings: healthSettings, updateSettings: updateHealthSettings } = useHealth();
     const { currentUser, logout } = useAuth();
     const [saving, setSaving] = useState(false);
     const [newCurrency, setNewCurrency] = useState('');
     const [newAccount, setNewAccount] = useState('');
+    const [activeTab, setActiveTab] = useState('account');
+    const [savingHealth, setSavingHealth] = useState(false);
+    const [calorieTarget, setCalorieTarget] = useState(() => String(healthSettings?.calorieTarget ?? 2000));
+    const [macroProtein, setMacroProtein] = useState(() => String(healthSettings?.macroTargets?.protein ?? 150));
+    const [macroCarbs, setMacroCarbs] = useState(() => String(healthSettings?.macroTargets?.carbs ?? 250));
+    const [macroFat, setMacroFat] = useState(() => String(healthSettings?.macroTargets?.fat ?? 65));
+
+    const handleSaveHealthSettings = async () => {
+        setSavingHealth(true);
+        try {
+            await updateHealthSettings({
+                ...healthSettings,
+                calorieTarget: Number(calorieTarget) || 2000,
+                macroTargets: {
+                    protein: Number(macroProtein) || 150,
+                    carbs: Number(macroCarbs) || 250,
+                    fat: Number(macroFat) || 65,
+                },
+            });
+        } finally {
+            setSavingHealth(false);
+        }
+    };
 
     const displayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Usuario';
     const email = currentUser?.email || '';
@@ -757,8 +782,23 @@ export default function Settings({ onNavigate, push }) {
             {/* Page title */}
             <div>
                 <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: 'var(--fg-1)', letterSpacing: '-0.02em' }}>Yo</h1>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--fg-3)' }}>Tu cuenta, catálogos y preferencias.</p>
+                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--fg-3)' }}>Cuenta, catálogos y preferencias.</p>
             </div>
+
+            {/* Tab selector */}
+            <Segmented
+                value={activeTab}
+                onChange={setActiveTab}
+                options={[
+                    { value: 'account',  label: 'Cuenta' },
+                    { value: 'finance',  label: 'Finanzas' },
+                    { value: 'health',   label: 'Salud' },
+                    { value: 'habits',   label: 'Hábitos' },
+                ]}
+            />
+
+            {/* CUENTA TAB */}
+            {activeTab === 'account' && <>
 
             {/* Profile hero */}
             <Card padding={18} style={{ borderRadius: 24 }}>
@@ -789,6 +829,9 @@ export default function Settings({ onNavigate, push }) {
                 </div>
             </Card>
 
+            </>}
+            {/* FINANZAS TAB */}
+            {activeTab === 'finance' && <>
             {/* Catalogs */}
             <Eyebrow style={{ paddingLeft: 4, marginTop: 4 }}>Catálogos</Eyebrow>
             <div style={{
@@ -819,32 +862,13 @@ export default function Settings({ onNavigate, push }) {
                 />
             </div>
 
+            </>}
+            {/* CUENTA TAB — part 2: notifications + logout */}
+            {activeTab === 'account' && <>
+
             {/* Notifications */}
             <Eyebrow style={{ paddingLeft: 4, marginTop: 4 }}>Avisos</Eyebrow>
             <NotificationsSection push={push} />
-
-            {/* More */}
-            <Eyebrow style={{ paddingLeft: 4, marginTop: 4 }}>Más</Eyebrow>
-            <Card padding={0}>
-                <button
-                    type="button"
-                    onClick={() => onNavigate && onNavigate('nutricion')}
-                    style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '13px 16px', background: 'transparent', border: 'none',
-                        cursor: 'pointer', textAlign: 'left',
-                    }}
-                >
-                    <IconTile icon="restaurant_menu" hue="amber" size={34} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg-1)' }}>Demo de Nutrición</div>
-                        <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 1 }}>
-                            Bonus · el sistema de diseño aplicado a otro módulo
-                        </div>
-                    </div>
-                    <Icon name="chevron_right" size={18} color="var(--fg-3)" />
-                </button>
-            </Card>
 
             {/* Logout */}
             <button
@@ -859,6 +883,77 @@ export default function Settings({ onNavigate, push }) {
                 <Icon name="logout" size={18} />
                 Cerrar sesión
             </button>
+            </>}
+
+            {/* SALUD TAB */}
+            {activeTab === 'health' && <>
+            <div>
+                <h3 style={{ margin: '0 0 16px', fontSize: 17, fontWeight: 800, color: 'var(--fg-1)' }}>Objetivos de salud</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Meta de calorías diarias (kcal)</span>
+                        <input
+                            type="number"
+                            value={calorieTarget}
+                            onChange={e => setCalorieTarget(e.target.value)}
+                            style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-default)', background: 'var(--bg-default)', borderRadius: 12, padding: '11px 12px', fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg-1)', outline: 'none' }}
+                            onFocus={e => e.target.style.borderColor = 'var(--clay-500)'}
+                            onBlur={e => e.target.style.borderColor = 'var(--border-default)'}
+                        />
+                    </div>
+                    <div>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Macros diarios (gramos)</span>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                            {[
+                                { label: 'Proteína', value: macroProtein, set: setMacroProtein },
+                                { label: 'Carbos', value: macroCarbs, set: setMacroCarbs },
+                                { label: 'Grasa', value: macroFat, set: setMacroFat },
+                            ].map(m => (
+                                <div key={m.label}>
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', display: 'block', marginBottom: 5 }}>{m.label}</span>
+                                    <input
+                                        type="number"
+                                        value={m.value}
+                                        onChange={e => m.set(e.target.value)}
+                                        style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-default)', background: 'var(--bg-default)', borderRadius: 10, padding: '9px 10px', fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg-1)', outline: 'none' }}
+                                        onFocus={e => e.target.style.borderColor = 'var(--clay-500)'}
+                                        onBlur={e => e.target.style.borderColor = 'var(--border-default)'}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleSaveHealthSettings}
+                        disabled={savingHealth}
+                        style={{
+                            alignSelf: 'flex-start', height: 40, padding: '0 20px', borderRadius: 12, border: 'none',
+                            background: 'var(--olive-600, #5E6738)', color: '#fff',
+                            fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 13,
+                            cursor: savingHealth ? 'wait' : 'pointer',
+                            opacity: savingHealth ? 0.6 : 1,
+                        }}
+                    >
+                        {savingHealth ? 'Guardando…' : 'Guardar objetivos'}
+                    </button>
+                </div>
+            </div>
+            </>}
+
+            {/* HÁBITOS TAB */}
+            {activeTab === 'habits' && <>
+            <Card padding={20} variant="outlined">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <IconTile icon="local_fire_department" hue="clay" size={40} />
+                    <div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--fg-1)' }}>Hábitos activos</div>
+                        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>Gestiona tus hábitos desde la pantalla principal de Hábitos.</div>
+                    </div>
+                </div>
+            </Card>
+            </>}
+
         </div>
     );
 }

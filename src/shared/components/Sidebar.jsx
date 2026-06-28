@@ -1,6 +1,6 @@
 import React from 'react';
-import { Icon } from './ds/Primitives';
-import { useAuth } from '../context/AuthContext';
+import { Icon } from '../ds/Primitives';
+import { useAuth } from '../../context/AuthContext';
 
 const RailItem = ({ icon, active, onClick, title }) => (
   <button
@@ -39,8 +39,14 @@ const RailItem = ({ icon, active, onClick, title }) => (
   </button>
 );
 
-export default function Sidebar({ activeView, onNavigate }) {
+const Divider = () => (
+  <div style={{ width: 28, height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
+);
+
+export default function Sidebar({ activeView, activeDomain, onNavigate, onSwitchDomain }) {
   const { logout } = useAuth();
+
+  const isFinance = activeDomain === 'finance';
 
   return (
     <nav style={{
@@ -57,19 +63,31 @@ export default function Sidebar({ activeView, onNavigate }) {
         width: 36, height: 36, borderRadius: 11,
         background: 'var(--ink-800)', color: '#fff',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        marginBottom: 24,
+        marginBottom: 16,
       }}>
         <Icon name="donut_small" size={20} />
       </div>
 
       {/* Nav items */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, alignItems: 'center' }}>
-        <RailItem icon="insights"     title="Radiografía"  active={activeView === 'insights'}     onClick={() => onNavigate('insights')} />
-        <RailItem icon="receipt_long" title="Movimientos"  active={activeView === 'transactions'} onClick={() => onNavigate('transactions')} />
-        <RailItem icon="savings"      title="Presupuestos" active={activeView === 'presupuestos'} onClick={() => onNavigate('presupuestos')} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, alignItems: 'center', overflowY: 'auto' }}>
+        {/* Home */}
+        <RailItem icon="home" title="Inicio" active={activeDomain === 'home'} onClick={() => onSwitchDomain('home')} />
 
-        {/* Divider */}
-        <div style={{ width: 28, height: 1, background: 'var(--border-subtle)', margin: '6px 0' }} />
+        <Divider />
+
+        {/* Finance */}
+        <RailItem icon="insights"     title="Radiografía"  active={isFinance && activeView === 'insights'}     onClick={() => { onSwitchDomain('finance'); onNavigate('insights'); }} />
+        <RailItem icon="receipt_long" title="Movimientos"  active={isFinance && activeView === 'transactions'} onClick={() => { onSwitchDomain('finance'); onNavigate('transactions'); }} />
+        <RailItem icon="savings"      title="Presupuestos" active={isFinance && activeView === 'presupuestos'} onClick={() => { onSwitchDomain('finance'); onNavigate('presupuestos'); }} />
+
+        <Divider />
+
+        {/* Other domains */}
+        <RailItem icon="restaurant"         title="Salud"   active={activeDomain === 'health'}  onClick={() => onSwitchDomain('health')} />
+        <RailItem icon="check_circle"       title="Tareas"  active={activeDomain === 'tasks'}   onClick={() => onSwitchDomain('tasks')} />
+        <RailItem icon="local_fire_department" title="Hábitos" active={activeDomain === 'habits'} onClick={() => onSwitchDomain('habits')} />
+
+        <Divider />
 
         <RailItem icon="settings" title="Ajustes" active={activeView === 'settings'} onClick={() => onNavigate('settings')} />
       </div>

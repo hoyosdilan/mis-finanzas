@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { Icon, Field } from './ds/Primitives';
+import { Icon, Field } from '../../../shared/ds/Primitives';
 
 const INPUT_STYLE = {
     width: '100%', padding: '10px 14px',

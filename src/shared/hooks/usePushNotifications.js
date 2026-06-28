@@ -6,8 +6,8 @@ import {
     getToken,
     onMessage,
     VAPID_PUBLIC_KEY,
-} from '../firebase';
-import { useAuth } from '../context/AuthContext';
+} from '../../firebase';
+import { useAuth } from '../../context/AuthContext';
 
 const SW_URL = '/firebase-messaging-sw.js';
 

@@ -4,15 +4,16 @@ import MetaModal from './MetaModal';
 import { useFinance } from '../context/FinanceContext';
 import { format, subMonths, addMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency } from '../../../shared/utils/format';
 import {
   Icon, Card, Pill, IconTile, IconBtn, ProgressBar, Eyebrow, SectionHeader,
-} from './ds/Primitives';
+} from '../../../shared/ds/Primitives';
+import ContextSwitcher from './ContextSwitcher';
 
 const HUE_CYCLE = ['clay', 'olive', 'amber', 'plum', 'ink'];
 
-export default function Presupuestos({ currentContext, onNavigate }) {
-  const { budgets, fetchBudgetConfig, saveBudgetConfig, goals, transactions, appConfig } = useFinance();
+export default function Presupuestos({ onNavigate }) {
+  const { budgets, fetchBudgetConfig, saveBudgetConfig, goals, transactions, appConfig, currentContext } = useFinance();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isPresupuestoModalOpen, setIsPresupuestoModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -383,7 +384,9 @@ export default function Presupuestos({ currentContext, onNavigate }) {
   };
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '16px 16px 32px' }} className="animate-fade-up">
+    <>
+      <ContextSwitcher />
+    <div style={{ maxWidth: 1000, margin: '0 auto', padding: '0 16px 32px' }} className="animate-fade-up">
 
       {/* Page header with month nav */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, marginBottom: 16 }}>
@@ -428,5 +431,6 @@ export default function Presupuestos({ currentContext, onNavigate }) {
         editingMeta={editingMeta}
       />
     </div>
+    </>
   );
 }

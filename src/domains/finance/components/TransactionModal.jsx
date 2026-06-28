@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import ConfirmModal from './ConfirmModal';
-import { Icon, Eyebrow, Segmented } from './ds/Primitives';
+import ConfirmModal from '../../../shared/components/ConfirmModal';
+import { Icon, Eyebrow, Segmented } from '../../../shared/ds/Primitives';
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',

@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
-import { formatCurrency, formatCompactNumber } from '../utils/format';
+import { formatCurrency, formatCompactNumber } from '../../../shared/utils/format';
 import {
   Icon, Card, Pill, Eyebrow, Editorial, SectionHeader, BarChart,
   hueForCategory, hueColorVar,
-} from './ds/Primitives';
+} from '../../../shared/ds/Primitives';
+import ContextSwitcher from './ContextSwitcher';
 
 const EXCHANGE_RATE = 4100;
 const DAY_MS = 86400000;
@@ -14,8 +15,8 @@ const toCOP = (t) => (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount
 const txDate = (t) => (t.date?.toDate ? t.date.toDate() : new Date(t.date));
 const midnight = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
 
-export default function Insights({ currentContext, onNavigate }) {
-  const { transactions, loading } = useFinance();
+export default function Insights({ onNavigate }) {
+  const { transactions, loading, currentContext } = useFinance();
 
   const filtered = useMemo(() => (
     transactions.filter(t => {
@@ -176,9 +177,11 @@ export default function Insights({ currentContext, onNavigate }) {
   const monthLabel = today.toLocaleDateString('es-CO', { month: 'long' });
 
   return (
+    <>
+      <ContextSwitcher />
     <div
       className="animate-fade-up"
-      style={{ maxWidth: 1000, margin: '0 auto', padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}
+      style={{ maxWidth: 1000, margin: '0 auto', padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}
     >
       {/* Greeting */}
       <div>
@@ -349,5 +352,6 @@ export default function Insights({ currentContext, onNavigate }) {
         </div>
       )}
     </div>
+    </>
   );
 }
