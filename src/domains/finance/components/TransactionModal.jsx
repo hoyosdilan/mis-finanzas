@@ -20,6 +20,40 @@ const FieldLabel = ({ children }) => (
   <Eyebrow style={{ marginBottom: 6, paddingLeft: 2 }}>{children}</Eyebrow>
 );
 
+const CONTEXT_OPTIONS = [
+  { value: 'personal', icon: 'person',          label: 'Personal' },
+  { value: 'business', icon: 'business_center', label: 'Negocio' },
+];
+
+// Compact icon toggle for the personal/business binary
+const ContextToggle = ({ value, onChange }) => (
+  <div style={{ display: 'flex', gap: 6 }}>
+    {CONTEXT_OPTIONS.map(opt => {
+      const active = value === opt.value;
+      return (
+        <button
+          key={opt.value}
+          type="button"
+          title={opt.label}
+          aria-label={opt.label}
+          aria-pressed={active}
+          onClick={() => onChange(opt.value)}
+          style={{
+            flex: 1, height: 44, borderRadius: 12, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            background: active ? 'var(--clay-500)' : 'var(--bg-raised)',
+            color: active ? '#fff' : 'var(--fg-3)',
+            border: active ? 'none' : '1px solid var(--border-default)',
+            transition: 'background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out)',
+          }}
+        >
+          <Icon name={opt.icon} size={20} fill={active} />
+        </button>
+      );
+    })}
+  </div>
+);
+
 export default function TransactionModal({ isOpen, onClose, editingTransaction, initialMode = 'transaction' }) {
   const { addTransaction, updateTransaction, addTransfer, appConfig, deleteTransaction } = useFinance();
 
@@ -218,19 +252,29 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
                 <Icon name="close" size={20} />
               </button>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--fg-1)' }}>{title}</div>
-              <button type="submit" style={{
-                background: 'transparent', border: 'none', color: 'var(--clay-600)',
-                fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                padding: '8px 4px',
-              }}>
-                Guardar
-              </button>
+              {!isNew ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  title="Eliminar"
+                  aria-label="Eliminar transacción"
+                  style={{
+                    width: 38, height: 38, borderRadius: 12, border: 'none',
+                    background: 'var(--danger-50)', color: 'var(--danger-700)', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <Icon name="delete" size={20} />
+                </button>
+              ) : (
+                <div style={{ width: 38, height: 38 }} aria-hidden />
+              )}
             </div>
 
             {/* Scrollable body */}
             <div style={{
               flex: 1, minHeight: 0, overflowY: 'auto',
-              padding: '0 16px 28px', display: 'flex', flexDirection: 'column', gap: 16,
+              padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 16,
             }}>
 
               {/* Type selector */}
@@ -350,21 +394,7 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
                 </div>
               </div>
 
-              {/* Subcategory */}
-              {currentSubcategories.length > 0 && (
-                <div>
-                  <FieldLabel>Subcategoría</FieldLabel>
-                  <div style={{ position: 'relative' }}>
-                    <select value={formData.subcategory} onChange={e => set('subcategory', e.target.value)} style={selectStyle}>
-                      <option value="">(Sin subcategoría)</option>
-                      {currentSubcategories.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Account + Date */}
+              {/* Cuenta origen + Fecha */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <FieldLabel>{mode === 'transfer' ? 'Cuenta origen' : 'Cuenta'}</FieldLabel>
@@ -382,42 +412,42 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
                 </div>
               </div>
 
-              {/* Context + (transfer) destination */}
-              <div style={{ display: 'grid', gridTemplateColumns: mode === 'transfer' ? '1fr 1fr' : '1fr', gap: 10 }}>
-                <div>
-                  <FieldLabel>{mode === 'transfer' ? 'Contexto origen' : 'Contexto'}</FieldLabel>
-                  <div style={{ position: 'relative' }}>
-                    <select value={formData.context} onChange={e => set('context', e.target.value)} style={selectStyle}>
-                      <option value="personal">Personal</option>
-                      <option value="business">Negocio</option>
-                    </select>
-                    <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                  </div>
-                </div>
-                {mode === 'transfer' && (
+              {/* Subcategoría + Contexto (íconos) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {currentSubcategories.length > 0 && (
                   <div>
-                    <FieldLabel>Contexto destino</FieldLabel>
+                    <FieldLabel>Subcategoría</FieldLabel>
                     <div style={{ position: 'relative' }}>
-                      <select value={formData.destinationContext} onChange={e => set('destinationContext', e.target.value)} style={selectStyle}>
-                        <option value="personal">Personal</option>
-                        <option value="business">Negocio</option>
+                      <select value={formData.subcategory} onChange={e => set('subcategory', e.target.value)} style={selectStyle}>
+                        <option value="">(Sin subcategoría)</option>
+                        {currentSubcategories.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                     </div>
                   </div>
                 )}
+                <div>
+                  <FieldLabel>{mode === 'transfer' ? 'Contexto origen' : 'Contexto'}</FieldLabel>
+                  <ContextToggle value={formData.context} onChange={v => set('context', v)} />
+                </div>
               </div>
 
-              {/* Transfer destination account */}
+              {/* Transfer: cuenta destino + contexto destino */}
               {mode === 'transfer' && (
-                <div>
-                  <FieldLabel>Cuenta destino</FieldLabel>
-                  <div style={{ position: 'relative' }}>
-                    <select required value={formData.destinationCard} onChange={e => set('destinationCard', e.target.value)} style={selectStyle}>
-                      <option value="" disabled>Seleccionar…</option>
-                      {(appConfig?.accounts || []).map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                    <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <FieldLabel>Cuenta destino</FieldLabel>
+                    <div style={{ position: 'relative' }}>
+                      <select required value={formData.destinationCard} onChange={e => set('destinationCard', e.target.value)} style={selectStyle}>
+                        <option value="" disabled>Seleccionar…</option>
+                        {(appConfig?.accounts || []).map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                      <Icon name="expand_more" size={16} color="var(--fg-3)" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <FieldLabel>Contexto destino</FieldLabel>
+                    <ContextToggle value={formData.destinationContext} onChange={v => set('destinationContext', v)} />
                   </div>
                 </div>
               )}
@@ -434,11 +464,19 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
                 />
               </div>
 
-              {/* Submit + delete */}
+            </div>
+
+            {/* Sticky footer — primary action always visible, no scroll needed */}
+            <div style={{
+              flexShrink: 0,
+              padding: '12px 16px calc(12px + env(safe-area-inset-bottom, 0px))',
+              borderTop: '1px solid var(--border-subtle)',
+              background: 'var(--bg-canvas)',
+            }}>
               <button
                 type="submit"
                 style={{
-                  marginTop: 4, padding: '14px 16px', border: 'none', cursor: 'pointer',
+                  width: '100%', padding: '14px 16px', border: 'none', cursor: 'pointer',
                   background: 'var(--clay-500)', color: '#fff', borderRadius: 14,
                   fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 14,
                   boxShadow: 'var(--shadow-clay)',
@@ -446,19 +484,6 @@ export default function TransactionModal({ isOpen, onClose, editingTransaction, 
               >
                 {isNew ? `Registrar ${mode === 'transfer' ? 'transferencia' : 'transacción'}` : 'Guardar cambios'}
               </button>
-              {!isNew && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmDeleteOpen(true)}
-                  style={{
-                    padding: '12px 16px', border: 'none', cursor: 'pointer',
-                    background: 'var(--danger-50)', color: 'var(--danger-700)', borderRadius: 14,
-                    fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 13,
-                  }}
-                >
-                  Eliminar transacción
-                </button>
-              )}
             </div>
           </form>
         </div>
