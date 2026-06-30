@@ -17,6 +17,10 @@ from google.genai import types
 # Firebase
 from firebase_admin import firestore, messaging
 from utils import conectar_db
+from tx_enrich import (
+    build_merchant_memory, memory_for_prompt, apply_merchant_memory,
+    validate_classification, looks_like_statement,
+)
 
 # --- CONFIGURACIÓN ---
 # Zona horaria de Colombia (UTC-5 fijo; el país no usa horario de verano).
@@ -41,6 +45,9 @@ PROCESSED_COLLECTION = 'processed_gmail_ids'
 
 # Tamaño máximo de texto del correo enviado al modelo
 MAX_BODY_CHARS = 3500
+
+# Cuántas transacciones recientes traer para construir la memoria de comercios
+MEMORY_HISTORY_LIMIT = 400
 
 
 def _load_token(db):
@@ -172,15 +179,17 @@ def _prefetch_context(db):
         else:
             cat_tree.append({'name': c, 'subcategories': []})
 
-    # Últimas 20 transacciones (todas las categorías)
-    recientes = []
+    # Historial para la memoria de comercios (ventana amplia: cubre comercios
+    # antiguos que no entran en "las últimas 20"). De aquí salen también las
+    # recientes que se muestran como muestra en el prompt.
+    historial = []
     try:
         docs = db.collection('finance_transactions') \
             .order_by('date', direction=firestore.Query.DESCENDING) \
-            .limit(20).get()
+            .limit(MEMORY_HISTORY_LIMIT).get()
         for d in docs:
             tx = d.to_dict()
-            recientes.append({
+            historial.append({
                 'title': tx.get('title'),
                 'category': tx.get('category'),
                 'subcategory': tx.get('subcategory', ''),
@@ -188,9 +197,11 @@ def _prefetch_context(db):
                 'type': tx.get('type'),
             })
     except Exception as e:
-        print(f"⚠️ No se pudo traer el historial reciente: {e}")
+        print(f"⚠️ No se pudo traer el historial: {e}")
 
-    return cat_tree, cuentas, monedas, recientes
+    memoria = build_merchant_memory(historial)
+    recientes = historial[:20]
+    return cat_tree, cuentas, monedas, recientes, memoria
 
 
 def procesar_texto_con_ia(texto, db, client):
@@ -201,14 +212,19 @@ def procesar_texto_con_ia(texto, db, client):
     historial reciente. Devuelve (datos, cat_tree).
     """
     print("🧠 Obteniendo contexto desde Firestore...")
-    cat_tree, cuentas, monedas, recientes = _prefetch_context(db)
+    cat_tree, cuentas, monedas, recientes, memoria = _prefetch_context(db)
     nombres_categorias = [c['name'] for c in cat_tree]
+    memoria_prompt = memory_for_prompt(memoria)
 
     prompt = f"""Eres un experto asistente financiero que lee correos de notificaciones bancarias.
 Extrae los datos de la transacción descrita en el correo y devuelve ÚNICAMENTE un objeto JSON válido.
 Ignora firmas, saludos, publicidad o información legal. Céntrate en la transacción (quién cobró y cuánto).
 Si el correo es una notificación de un pago que TÚ hiciste, type = 'debit'.
-¡MUY IMPORTANTE!: Si el correo indica que la transacción "no fue exitosa", fue "Rechazada", "Fallida", "No exitosa", "Declinada", etc., devuelve únicamente {{"type": "ignore"}}.
+
+¡MUY IMPORTANTE! Devuelve únicamente {{"type": "ignore"}} si el correo:
+- indica que la transacción "no fue exitosa", fue "Rechazada", "Fallida", "Declinada", etc.; o
+- NO es una transacción individual: extractos / estados de cuenta, resúmenes mensuales,
+  alertas de saldo o de cupo disponible, códigos OTP, publicidad o avisos de seguridad.
 
 Categorías disponibles (cada una con sus subcategorías válidas):
 {json.dumps(cat_tree, ensure_ascii=False, indent=2)}
@@ -216,19 +232,26 @@ Categorías disponibles (cada una con sus subcategorías válidas):
 Cuentas/tarjetas disponibles: {cuentas}
 Monedas disponibles: {monedas}
 
-Historial de transacciones recientes (úsalo para inferir el contexto y normalizar la subcategoría):
+Memoria de comercios (clasificación HABITUAL por comercio — úsala como prior fuerte para
+categoría, subcategoría y contexto, y para imitar cómo se suele titular cada comercio):
+{json.dumps(memoria_prompt, ensure_ascii=False, indent=2)}
+
+Transacciones recientes (muestra adicional para inferir contexto):
 {json.dumps(recientes, ensure_ascii=False, indent=2)}
 
 Reglas para los campos:
-- type: 'debit' (gasto), 'credit' (ingreso) o 'ignore' (transacción fallida/declinada).
+- type: 'debit' (gasto), 'credit' (ingreso) o 'ignore' (fallida/declinada o no-transacción).
 - amount: el monto numérico exacto, positivo y sin símbolos de moneda.
-- title: un resumen muy corto del concepto/comercio.
+- title: un resumen muy corto del concepto/comercio. Si el comercio aparece en la memoria, titúlalo igual que ahí.
 - currency: elige una opción de {monedas}, o 'COP' si el texto usa $, pesos, etc.
 - category: elige una opción de {nombres_categorias}. Si no aplica ninguna, usa 'Otros'.
 - subcategory: elige una subcategoría VÁLIDA de la categoría que elegiste (ver lista de arriba). Si ninguna aplica o esa categoría no tiene subcategorías, usa "".
 - card: elige una opción de {cuentas} según la data del correo.
 - context: 'personal' o 'business'. Infiérelo del título, el correo y el historial; por defecto 'personal'.
-- comments: un mensaje breve y descriptivo que resuma la transacción.
+- comments: nota con el DETALLE concreto que aparezca en el correo, no un genérico. Si el correo
+  lista productos (p. ej. un domicilio), enuméralos; si es un transporte e incluye origen/destino, ponlos;
+  si es una transferencia, indica la contraparte (quién envía o recibe). Si el correo no trae detalle
+  específico, resume brevemente la transacción.
 
 Texto del correo:
 "{texto}"
@@ -236,7 +259,7 @@ Texto del correo:
 Devuelve solo el JSON, sin explicación ni markdown. Formato esperado:
 {{"type": "", "amount": 0, "title": "", "currency": "", "category": "", "subcategory": "", "card": "", "context": "", "comments": ""}}
 
-Si la transacción no fue exitosa, devuelve únicamente:
+Si la transacción no fue exitosa o no es una transacción individual, devuelve únicamente:
 {{"type": "ignore"}}
 """
 
@@ -253,22 +276,34 @@ Si la transacción no fue exitosa, devuelve únicamente:
         )
         datos_extraidos = json.loads(response.text)
         print("✅ Análisis JSON completado con éxito.")
+
+        # Post-corrección determinista: si el comercio es conocido y consistente,
+        # fijamos la clasificación desde la memoria (no toca amount/title/comments).
+        datos_extraidos, info = apply_merchant_memory(datos_extraidos, memoria)
+        if info:
+            print(f"🧩 Memoria de comercios ajustó {list(info['changed'])} para '{info['merchant']}' (visto {info['count']}×).")
+
+        # Validación contra catálogos (categoría válida, cuenta válida).
+        datos_extraidos = validate_classification(datos_extraidos, nombres_categorias, cuentas)
         return datos_extraidos, cat_tree
     except Exception as e:
         print(f"\n❌ Error analizando o interpretando la respuesta de Gemini: {e}")
         return None, cat_tree
 
 
-def registrar_transaccion(datos_ia, tx_dt, db, cat_tree):
+def registrar_transaccion(datos_ia, tx_dt, db, cat_tree, dry_run=False):
     """Guarda la transacción extraída por la IA en Firestore.
 
     `tx_dt` es el datetime (tz Colombia) del momento del correo bancario, que
     usamos como verdad para la fecha Y la hora. No dependemos de la fecha que
     extrae el LLM (poco fiable y propensa a confundir el día).
+
+    Con `dry_run=True` arma y muestra la transacción pero NO escribe en
+    Firestore ni envía push (para pruebas en producción sin tocar la data).
     """
     # Manejar transacciones declinadas
     if datos_ia.get('type') == 'ignore':
-        print("⏭️ La IA determinó que la transacción fue fallida o declinada. Ignorando guardado.")
+        print("⏭️ La IA determinó que la transacción fue fallida/declinada o que no es una transacción. Ignorando guardado.")
         return True  # Devolvemos True para que de todas formas se quite la etiqueta
 
     # Fecha (solo día) y timestamp (día + hora) derivados del correo, en hora local.
@@ -319,6 +354,10 @@ def registrar_transaccion(datos_ia, tx_dt, db, cat_tree):
     print("\n📦 Datos a guardar en Firebase:")
     for k, v in nueva_transaccion.items():
         print(f"   {k}: {v}")
+
+    if dry_run:
+        print("🧪 DRY-RUN: no se escribe en Firebase ni se envía push.")
+        return True
 
     try:
         _, doc_ref = db.collection('finance_transactions').add(nueva_transaccion)
@@ -398,10 +437,67 @@ def mark_as_processed(service, msg_id, label_id_to_remove):
         print(f"⚠️ Error intentando remover etiqueta: {e}")
 
 
+def reprocess_last_emails(db, service, client, n, dry_run):
+    """Modo PRUEBA: re-procesa los últimos N correos ya procesados (ordenados por
+    processedAt). Pensado para validar el pipeline en producción tras un merge,
+    sin esperar a un correo real. Con dry_run=True NO escribe en Firestore, NO
+    envía push y NO toca etiquetas de Gmail.
+    """
+    modo = "DRY-RUN (no escribe nada)" if dry_run else "⚠️ ESCRIBE en Firestore"
+    print(f"🧪 Modo prueba — re-procesando los últimos {n} correos procesados · {modo}")
+
+    docs = db.collection(PROCESSED_COLLECTION) \
+        .order_by('processedAt', direction=firestore.Query.DESCENDING) \
+        .limit(n).get()
+    ids = [d.id for d in docs]
+    if not ids:
+        print("⚠️ No hay correos en el historial de procesados.")
+        return
+
+    for i, msg_id in enumerate(ids, 1):
+        print("\n" + "-" * 50)
+        print(f"📩 [{i}/{len(ids)}] Re-procesando correo {msg_id}")
+        try:
+            message_data = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+        except Exception as e:
+            print(f"⚠️ No se pudo traer el correo {msg_id} desde Gmail: {e}")
+            continue
+
+        payload = message_data.get('payload', {})
+        subject = next((h.get('value', '') for h in payload.get('headers', [])
+                        if h.get('name', '').lower() == 'subject'), '')
+        if looks_like_statement(subject):
+            print(f"🚫 Sería ignorado por el gate de extractos ('{subject[:60]}').")
+            continue
+
+        internal_date_ms = int(message_data.get('internalDate', 0))
+        tx_dt = (
+            datetime.datetime.fromtimestamp(internal_date_ms / 1000.0, tz=BOGOTA)
+            if internal_date_ms else datetime.datetime.now(BOGOTA)
+        )
+
+        body_text = extract_email_body(payload)
+        if not body_text:
+            print(f"⚠️ No se pudo extraer texto legible del correo {msg_id}")
+            continue
+
+        datos_ia, cat_tree = procesar_texto_con_ia(body_text[:MAX_BODY_CHARS], db, client)
+        if datos_ia:
+            registrar_transaccion(datos_ia, tx_dt, db, cat_tree, dry_run=dry_run)
+        else:
+            print(f"⚠️ El correo {msg_id} falló en la interpretación por IA.")
+
+    print("\n🧪 Fin del modo prueba.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Automatización de Gmail a Firestore con Gemini")
     parser.add_argument('--label', default=DEFAULT_LABEL,
                         help=f"Nombre de la etiqueta en Gmail (por defecto: '{DEFAULT_LABEL}')")
+    parser.add_argument('--reprocess-last', type=int, default=0, metavar='N',
+                        help="Modo PRUEBA: re-procesa los últimos N correos ya procesados (no toca la etiqueta).")
+    parser.add_argument('--dry-run', action='store_true',
+                        help="No escribe en Firestore ni envía push. Úsalo con --reprocess-last para validar tras un merge.")
     args = parser.parse_args()
 
     gemini_key = os.environ.get('GEMINI_API_KEY')
@@ -414,6 +510,12 @@ def main():
 
     print("🔑 Iniciando conexión con Gmail...")
     service = authenticate_gmail(db)
+
+    # Modo prueba: re-procesar los últimos N correos (validar el pipeline en
+    # producción tras un merge, idealmente con --dry-run).
+    if args.reprocess_last > 0:
+        reprocess_last_emails(db, service, client, args.reprocess_last, args.dry_run)
+        return
 
     label_name = args.label
     print(f"🔍 Buscando el ID interno para la etiqueta '{label_name}'...")
@@ -447,6 +549,17 @@ def main():
         # Descargar el correo completo
         message_data = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
         payload = message_data.get('payload', {})
+
+        # Gate barato pre-LLM: los extractos / estados de cuenta no son
+        # transacciones individuales. Se detectan por asunto y se descartan
+        # sin gastar una llamada al modelo.
+        subject = next((h.get('value', '') for h in payload.get('headers', [])
+                        if h.get('name', '').lower() == 'subject'), '')
+        if looks_like_statement(subject):
+            print(f"🚫 El correo parece un extracto/estado de cuenta ('{subject[:60]}'). Se ignora sin llamar al LLM.")
+            mark_as_processed(service, msg_id, label_id)
+            save_processed_email(db, msg_id)
+            continue
 
         # Momento del correo (≈ momento de la transacción) en hora local de Colombia.
         # internalDate viene en epoch ms UTC; lo convertimos a UTC-5 (Colombia no
