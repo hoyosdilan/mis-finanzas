@@ -71,6 +71,7 @@ export function AuthProvider({ children }) {
 
     const value = {
         currentUser,
+        authLoading: loading,
         loginWithGoogle,
         logout,
         loginError
@@ -78,7 +79,7 @@ export function AuthProvider({ children }) {
 
     return (
         <AuthContext.Provider value={value}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 }
