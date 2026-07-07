@@ -182,12 +182,6 @@ export default function HomeScreen({ onSwitchDomain }) {
                         title="Infografías"
                         subtitle="Visualizaciones"
                     />
-                    <LinkCard
-                        href="https://mrjunos.github.io/cv/"
-                        icon="badge"
-                        title="Mi CV"
-                        subtitle="Perfil profesional"
-                    />
                 </div>
             </div>
 
