@@ -40,3 +40,4 @@ gmail_sync.lock
 __pycache__/
 *.pyc
 .gh-config/
+.venv/
