@@ -10,10 +10,15 @@ service cloud.firestore {
 
     // Rules for the 'finance_settings/users' whitelist document itself
     match /finance_settings/users {
-      // Allow any logged-in user to read the whitelist to check if they belong
-      allow read: if request.auth != null;
-      // Allow creation ONLY if it doesn't exist yet (for the very first admin)
-      allow create: if request.auth != null && !exists(/databases/$(database)/documents/finance_settings/users);
+      // Members can read the whitelist. Before it exists (bootstrap) any
+      // logged-in user may read, only to discover it's missing; non-members
+      // get permission-denied instead of reading the owner's email.
+      allow read: if request.auth != null &&
+                  (!exists(/databases/$(database)/documents/finance_settings/users) || isUserAllowed());
+      // Creation only during bootstrap, and only by the owner
+      allow create: if request.auth != null &&
+                    !exists(/databases/$(database)/documents/finance_settings/users) &&
+                    request.auth.token.email == 'hoyosdilan@gmail.com';
       // Allow modifications ONLY by people already in the whitelist
       allow update, delete: if isUserAllowed();
     }

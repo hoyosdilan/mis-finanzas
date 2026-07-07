@@ -56,8 +56,16 @@ export function AuthProvider({ children }) {
                         }
                     }
                 } catch (error) {
-                    console.error("Error checking whitelist: ", error);
-                    setLoginError('Error de servidor verificando permisos.');
+                    if (error.code === 'permission-denied') {
+                        // Las reglas niegan la lectura de la whitelist a quien
+                        // no es miembro: es un acceso denegado, no un fallo.
+                        console.warn("Blocked unauthorized login attempt from: ", user.email);
+                        await signOut(auth);
+                        setLoginError('Acceso Denegado: Tu correo no se encuentra en la lista de usuarios autorizados.');
+                    } else {
+                        console.error("Error checking whitelist: ", error);
+                        setLoginError('Error de servidor verificando permisos.');
+                    }
                     setCurrentUser(null);
                 }
             } else {
