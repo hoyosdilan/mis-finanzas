@@ -4,6 +4,7 @@ import { useHealth } from '../domains/health/context/HealthContext';
 import { useAuth } from '../context/AuthContext';
 import { Icon, Card, Eyebrow, IconTile, Segmented } from '../shared/ds/Primitives';
 import ConfirmModal from '../shared/components/ConfirmModal';
+import { FEATURES } from '../config/features';
 
 const INPUT_STYLE = {
     flex: 1, padding: '9px 12px',
@@ -378,8 +379,8 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
                         disabled={saving}
                     >
                         <option value="personal">Personal</option>
-                        <option value="business">Negocio</option>
-                        <option value="both">Ambos</option>
+                        {FEATURES.business && <option value="business">Negocio</option>}
+                        {FEATURES.business && <option value="both">Ambos</option>}
                     </select>
                     <button
                         onClick={handleAddCategory}
@@ -442,8 +443,8 @@ const CategoryConfigSection = ({ appConfig, saving, updateAppConfig }) => {
                                         <select style={{ ...INPUT_STYLE, flex: 1, fontSize: 12, padding: '6px 10px' }} value={editCatForm.context}
                                             onChange={e => setEditCatForm({ ...editCatForm, context: e.target.value })} disabled={saving}>
                                             <option value="personal">Personal</option>
-                                            <option value="business">Negocio</option>
-                                            <option value="both">Ambos</option>
+                                            {FEATURES.business && <option value="business">Negocio</option>}
+                                            {FEATURES.business && <option value="both">Ambos</option>}
                                         </select>
                                         <button onClick={() => submitEditCategory(idx)} disabled={saving || !editCatForm.name.trim()}
                                             style={ICON_BTN({ color: 'var(--olive-600)' })}
@@ -794,7 +795,7 @@ export default function Settings({ push }) {
                     { value: 'finance',  label: 'Finanzas' },
                     { value: 'health',   label: 'Salud' },
                     { value: 'habits',   label: 'Hábitos' },
-                ]}
+                ].filter(t => FEATURES.health || t.value !== 'health')}
             />
 
             {/* CUENTA TAB */}

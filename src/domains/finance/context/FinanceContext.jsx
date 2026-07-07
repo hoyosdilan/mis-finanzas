@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 import { db } from '../../../firebase';
 import { collection, onSnapshot, addDoc, doc, setDoc, getDoc, Timestamp, deleteDoc, updateDoc } from 'firebase/firestore';
 import { normalizeCategory, parseTransactionDate, calculateBalances } from '../utils/financeHelpers';
+import { FEATURES } from '../../../config/features';
 
 const FinanceContext = createContext();
 
@@ -24,7 +25,9 @@ export const FinanceProvider = ({ children }) => {
     const [budgets, setBudgets] = useState({});
     const [goals, setGoals] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [currentContext, setCurrentContext] = useState('unified');
+    // Con Negocio oculto la app opera fija en 'personal' (el contexto
+    // 'unified' no permite gestionar presupuestos)
+    const [currentContext, setCurrentContext] = useState(FEATURES.business ? 'unified' : 'personal');
 
     // Global Config State
     const [appConfig, setAppConfig] = useState(DEFAULT_CONFIG);

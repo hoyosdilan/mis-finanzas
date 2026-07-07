@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from '../ds/Primitives';
 import { useAuth } from '../../context/AuthContext';
+import { FEATURES } from '../../config/features';
 
 const RailItem = ({ icon, active, onClick, title }) => (
   <button
@@ -82,7 +83,9 @@ export default function Sidebar({ activeView, activeDomain, onNavigate, onSwitch
         <Divider />
 
         {/* Other domains */}
-        <RailItem icon="restaurant"         title="Salud"   active={activeDomain === 'health'}  onClick={() => onSwitchDomain('health')} />
+        {FEATURES.health && (
+            <RailItem icon="restaurant"     title="Salud"   active={activeDomain === 'health'}  onClick={() => onSwitchDomain('health')} />
+        )}
         <RailItem icon="check_circle"       title="Tareas"  active={activeDomain === 'tasks'}   onClick={() => onSwitchDomain('tasks')} />
         <RailItem icon="local_fire_department" title="Hábitos" active={activeDomain === 'habits'} onClick={() => onSwitchDomain('habits')} />
 

@@ -5,6 +5,7 @@ import { useTasks } from '../../domains/tasks/context/TasksContext';
 import { useHabits } from '../../domains/habits/context/HabitsContext';
 import { Icon, Card, Eyebrow, Editorial } from '../ds/Primitives';
 import { formatCompactNumber } from '../utils/format';
+import { FEATURES } from '../../config/features';
 
 const EXCHANGE_RATE = 4100;
 const toCOP = (t) => (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount);
@@ -141,15 +142,17 @@ export default function HomeScreen({ onSwitchDomain }) {
                     ]}
                     onClick={() => onSwitchDomain('finance')}
                 />
-                <DomainCard
-                    color="var(--olive-600, #5E6738)"
-                    icon="restaurant"
-                    title="Salud"
-                    stats={[
-                        { value: todayFoodSummary.kcal.toLocaleString('es-CO'), label: 'kcal hoy' },
-                    ]}
-                    onClick={() => onSwitchDomain('health')}
-                />
+                {FEATURES.health && (
+                    <DomainCard
+                        color="var(--olive-600, #5E6738)"
+                        icon="restaurant"
+                        title="Salud"
+                        stats={[
+                            { value: todayFoodSummary.kcal.toLocaleString('es-CO'), label: 'kcal hoy' },
+                        ]}
+                        onClick={() => onSwitchDomain('health')}
+                    />
+                )}
                 <DomainCard
                     color="var(--ink-600, #4A4035)"
                     icon="checklist"

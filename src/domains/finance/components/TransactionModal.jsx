@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import ConfirmModal from '../../../shared/components/ConfirmModal';
 import { Icon, Eyebrow, Segmented } from '../../../shared/ds/Primitives';
+import { FEATURES } from '../../../config/features';
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',
@@ -23,7 +24,7 @@ const FieldLabel = ({ children }) => (
 const CONTEXT_OPTIONS = [
   { value: 'personal', icon: 'person',          label: 'Personal' },
   { value: 'business', icon: 'business_center', label: 'Negocio' },
-];
+].filter(opt => FEATURES.business || opt.value !== 'business');
 
 // Compact icon toggle for the personal/business binary
 const ContextToggle = ({ value, onChange }) => (
