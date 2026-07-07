@@ -1,12 +1,14 @@
 import os
 import json
+import glob
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 # Archivo local de la service account (solo para desarrollo).
 # En CI se usa la variable de entorno FIREBASE_ADMIN_SDK_JSON.
-LOCAL_CREDENTIALS_FILE = os.path.join(
-    os.path.dirname(__file__), 'firebase-adminsdk-fbsvc-bb7cb78f3e.json'
+_matches = glob.glob(os.path.join(os.path.dirname(__file__), '*firebase-adminsdk*.json'))
+LOCAL_CREDENTIALS_FILE = _matches[0] if _matches else os.path.join(
+    os.path.dirname(__file__), 'firebase-adminsdk.json'
 )
 
 
