@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
 
 const firebaseConfig = {
     projectId: "mis-finanzas-6ed8d",
@@ -13,7 +12,14 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// Caché persistente (IndexedDB): las visitas repetidas pintan los datos al
+// instante desde disco y solo sincronizan los documentos que cambiaron.
+// Si IndexedDB no está disponible, el SDK degrada a caché en memoria solo.
+export const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -22,23 +28,38 @@ export const googleProvider = new GoogleAuthProvider();
 // Cloud Messaging → Web Push certificates. No es secreta. Se inyecta en build.
 export const VAPID_PUBLIC_KEY = import.meta.env.VITE_FCM_VAPID_KEY;
 
-let _messaging = null;
-let _messagingChecked = false;
+// El módulo firebase/messaging se carga con import() dinámico para mantenerlo
+// fuera del bundle inicial: solo se necesita si el usuario usa notificaciones.
+let _messagingModule = null;
+let _messagingPromise = null;
 
 // Devuelve la instancia de Messaging solo si el navegador la soporta.
 // Retorna null en iOS no instalado como PWA y en entornos de test (jsdom),
-// evitando que getMessaging() lance excepciones.
-export async function getMessagingIfSupported() {
-    if (_messaging) return _messaging;
-    if (_messagingChecked) return _messaging;
-    _messagingChecked = true;
-    try {
-        if (!(await isSupported())) return null;
-        _messaging = getMessaging(app);
-    } catch {
-        _messaging = null;
+// evitando que getMessaging() lance excepciones. Cachea la promesa para que
+// llamadas concurrentes compartan la misma resolución.
+export function getMessagingIfSupported() {
+    if (!_messagingPromise) {
+        _messagingPromise = (async () => {
+            try {
+                const mod = await import('firebase/messaging');
+                if (!(await mod.isSupported())) return null;
+                _messagingModule = mod;
+                return mod.getMessaging(app);
+            } catch {
+                return null;
+            }
+        })();
     }
-    return _messaging;
+    return _messagingPromise;
 }
 
-export { getToken, onMessage };
+// Wrappers síncronos sobre el módulo ya cargado. Solo son válidos con una
+// instancia de messaging obtenida de getMessagingIfSupported(), que es quien
+// carga el módulo — igual que el contrato de los call sites existentes.
+export function getToken(messaging, options) {
+    return _messagingModule.getToken(messaging, options);
+}
+
+export function onMessage(messaging, handler) {
+    return _messagingModule.onMessage(messaging, handler);
+}

@@ -8,9 +8,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/messaging'],
-          'vendor-charts': ['recharts'],
+          // firebase/messaging y recharts NO van aquí: se cargan con import()
+          // dinámico; listarlos en manualChunks haría que el entry los
+          // referencie (modulepreload) y se descarguen en la carga inicial.
+          'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
           'vendor-datefns': ['date-fns'],
         },
       },

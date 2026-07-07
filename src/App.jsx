@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -19,21 +19,22 @@ import { HealthProvider } from './domains/health/context/HealthContext';
 import { TasksProvider } from './domains/tasks/context/TasksContext';
 import { HabitsProvider } from './domains/habits/context/HabitsContext';
 
-// Finance screens
-import Insights from './domains/finance/components/Insights';
-import Transactions from './domains/finance/components/Transactions';
-import Presupuestos from './domains/finance/components/Presupuestos';
-import CategoriaDetalle from './domains/finance/components/CategoriaDetalle';
-import TransaccionDetalle from './domains/finance/components/TransaccionDetalle';
-import TransactionModal from './domains/finance/components/TransactionModal';
+// Vistas cargadas bajo demanda (code-splitting): solo HomeScreen es la vista
+// inicial; el resto se descarga al navegar, manteniendo pequeño el JS inicial.
+const Insights           = lazy(() => import('./domains/finance/components/Insights'));
+const Transactions       = lazy(() => import('./domains/finance/components/Transactions'));
+const Presupuestos       = lazy(() => import('./domains/finance/components/Presupuestos'));
+const CategoriaDetalle   = lazy(() => import('./domains/finance/components/CategoriaDetalle'));
+const TransaccionDetalle = lazy(() => import('./domains/finance/components/TransaccionDetalle'));
+const TransactionModal   = lazy(() => import('./domains/finance/components/TransactionModal'));
 
 // Other domain screens
-import HealthHome from './domains/health/components/HealthHome';
-import TasksHome from './domains/tasks/components/TasksHome';
-import HabitsHome from './domains/habits/components/HabitsHome';
+const HealthHome = lazy(() => import('./domains/health/components/HealthHome'));
+const TasksHome  = lazy(() => import('./domains/tasks/components/TasksHome'));
+const HabitsHome = lazy(() => import('./domains/habits/components/HabitsHome'));
 
 // Settings stays in legacy location (evolves in place)
-import Settings from './components/Settings';
+const Settings = lazy(() => import('./components/Settings'));
 
 // Views that push from within a domain (not tab-bar destinations)
 const DETAIL_VIEWS = ['categoria', 'transaccion'];
@@ -216,8 +217,39 @@ const TabBar = React.memo(function TabBar({ activeDomain, onHome, onFinance, onS
   );
 });
 
+// Spinner mínimo mientras baja el chunk de una vista lazy.
+function ViewLoader() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 80 }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: '50%',
+        border: '3px solid rgba(201, 88, 42, 0.2)',
+        borderTopColor: '#C9582A',
+        animation: 'splash-spin 0.8s linear infinite',
+      }} />
+    </div>
+  );
+}
+
+// Mismo look del splash inline de index.html, para el lapso entre que React
+// monta y Auth resuelve (evita flashear el Login a usuarios ya logueados).
+function AuthSplash() {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#FBF7EE' }}>
+      <div style={{
+        position: 'absolute', top: '50%', left: '50%',
+        width: 36, height: 36, margin: '-18px 0 0 -18px',
+        borderRadius: '50%',
+        border: '3px solid rgba(201, 88, 42, 0.2)',
+        borderTopColor: '#C9582A',
+        animation: 'splash-spin 0.8s linear infinite',
+      }} />
+    </div>
+  );
+}
+
 function AppContent() {
-  const { currentUser } = useAuth();
+  const { currentUser, authLoading } = useAuth();
   const [domain, setDomain] = useState('home');
   const [currentView, setCurrentView] = useState('home');
   const [viewParams, setViewParams] = useState(null);
@@ -285,6 +317,10 @@ function AppContent() {
     return () => navigator.serviceWorker.removeEventListener('message', handler);
   }, []);
 
+  if (authLoading) {
+    return <AuthSplash />;
+  }
+
   if (!currentUser) {
     return <Login />;
   }
@@ -351,6 +387,7 @@ function AppContent() {
 
                 {/* Scrollable content */}
                 <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }} className="pb-28 md:pb-8">
+                  <Suspense fallback={<ViewLoader />}>
                   {/* Home */}
                   {domain === 'home' && currentView === 'home' && (
                     <HomeScreen onSwitchDomain={switchDomain} />
@@ -370,6 +407,7 @@ function AppContent() {
 
                   {/* Settings — accessible from any domain */}
                   {isSettingsView && <Settings onNavigate={navigate} push={push} />}
+                  </Suspense>
                 </main>
               </div>
 
@@ -500,12 +538,18 @@ function AppContent() {
                 </div>
               )}
 
-              <TransactionModal
-                isOpen={isFABModalOpen}
-                onClose={() => { setIsFABModalOpen(false); setEditingTx(null); }}
-                editingTransaction={editingTx}
-                initialMode={fabModalMode}
-              />
+              {/* Montado solo al abrir: el modal retorna null cerrado, así que
+                  esto es equivalente y evita descargar su chunk al inicio. */}
+              {isFABModalOpen && (
+                <Suspense fallback={null}>
+                  <TransactionModal
+                    isOpen={isFABModalOpen}
+                    onClose={() => { setIsFABModalOpen(false); setEditingTx(null); }}
+                    editingTransaction={editingTx}
+                    initialMode={fabModalMode}
+                  />
+                </Suspense>
+              )}
             </div>
           </HabitsProvider>
         </TasksProvider>
