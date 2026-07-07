@@ -4,12 +4,12 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
 
 const firebaseConfig = {
-    projectId: "brewbooks-mvp",
-    appId: "1:495427564009:web:607ffc73ff70cc70191b78",
-    storageBucket: "brewbooks-mvp.firebasestorage.app",
-    apiKey: "AIzaSyB8ugTqPfTgMMneMY8_Jmacwf91dsINTjk",
-    authDomain: "brewbooks-mvp.firebaseapp.com",
-    messagingSenderId: "495427564009"
+    projectId: "mis-finanzas-6ed8d",
+    appId: "1:342564772518:web:73b52571560acb385ef267",
+    storageBucket: "mis-finanzas-6ed8d.firebasestorage.app",
+    apiKey: "AIzaSyDE6Z3lBYL9t5ICSHh3nM7BJcuDJ98o9PI",
+    authDomain: "mis-finanzas-6ed8d.firebaseapp.com",
+    messagingSenderId: "342564772518"
 };
 
 const app = initializeApp(firebaseConfig);

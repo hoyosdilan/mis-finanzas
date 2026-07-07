@@ -32,20 +32,10 @@ jobs:
         run: npm run build
         env:
           VITE_FCM_VAPID_KEY: ${{ secrets.VITE_FCM_VAPID_KEY }}
-      - name: Deploy to mis-finanzas-jj
+      - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_BREWBOOKS_MVP }}'
-          projectId: brewbooks-mvp
-          target: finanzas
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MIS_FINANZAS }}'
+          projectId: mis-finanzas-6ed8d
           channelId: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'live' }}
-      - name: Deploy to brewbooks-mvp
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_BREWBOOKS_MVP }}'
-          projectId: brewbooks-mvp
-          target: brewbooks
-          channelId: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'live' }}
-          disableComment: true

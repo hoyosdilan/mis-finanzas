@@ -9,12 +9,12 @@ importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-    apiKey: 'AIzaSyB8ugTqPfTgMMneMY8_Jmacwf91dsINTjk',
-    authDomain: 'brewbooks-mvp.firebaseapp.com',
-    projectId: 'brewbooks-mvp',
-    storageBucket: 'brewbooks-mvp.firebasestorage.app',
-    messagingSenderId: '495427564009',
-    appId: '1:495427564009:web:607ffc73ff70cc70191b78',
+    apiKey: 'AIzaSyDE6Z3lBYL9t5ICSHh3nM7BJcuDJ98o9PI',
+    authDomain: 'mis-finanzas-6ed8d.firebaseapp.com',
+    projectId: 'mis-finanzas-6ed8d',
+    storageBucket: 'mis-finanzas-6ed8d.firebasestorage.app',
+    messagingSenderId: '342564772518',
+    appId: '1:342564772518:web:73b52571560acb385ef267',
 });
 
 const messaging = firebase.messaging();

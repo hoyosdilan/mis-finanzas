@@ -33,7 +33,7 @@ npm run build
 firebase deploy --only hosting
 ```
 
-Tu app estará actualizada en: **https://mis-finanzas-jj.web.app**
+Tu app estará actualizada en: **https://mis-finanzas-6ed8d.web.app**
 
 ---
 
