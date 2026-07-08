@@ -1,110 +1,202 @@
 # Mis Finanzas 💸
 
-Personal finance management app with an AI-powered transaction pipeline. Bank notification emails are automatically parsed, analyzed by Gemini, and registered into a Firebase database — no manual data entry.
+App de finanzas personales con pipeline de transacciones por IA. Los correos de notificación del banco se parsean automáticamente, los analiza Gemini y quedan registrados en Firebase — cero entrada manual.
 
 ![Stack](https://img.shields.io/badge/React_19-Vite-blue) ![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange) ![Gemini](https://img.shields.io/badge/AI-Gemini_Flash-green) ![Python](https://img.shields.io/badge/Python-3.12-blue)
 
+> Fork de [mrjunos/mis-finanzas](https://github.com/mrjunos/mis-finanzas), montado sobre el proyecto Firebase `mis-finanzas-6ed8d`.
+> App en producción: **https://mis-finanzas-6ed8d.web.app**
+
 ---
 
-## How It Works
+## Cómo funciona
 
 ```
-Gmail (bank emails)
-      ↓  [Gmail API + label filter]
-Email Parser
-      ↓  [BeautifulSoup]
-Gemini (gemini-3.1-flash-lite)
-      ↓  [Structured JSON extraction]
-Firestore
+Gmail (correos del banco, etiqueta Bancos/PendingBot)
+      ↓  [Gmail API — cron de GitHub Actions cada ~10 min]
+Parser de correo (BeautifulSoup)
       ↓
-React Dashboard
+Gemini (gemini-3.1-flash-lite) → JSON estructurado
+      ↓
+Firestore  →  Dashboard React (web / PWA en el celular)
+      ↓
+Push notification: "nuevo movimiento por revisar"
 ```
 
-A GitHub Actions workflow runs every ~10 minutes and processes any email tagged `Bancos/PendingBot` in Gmail:
-
-1. **Fetches** emails via the Gmail API
-2. **Parses** the raw HTML body with BeautifulSoup
-3. **Sends** the text to Gemini, which extracts a structured transaction (type, amount, category, subcategory, context, date, ...) in a single call
-4. **Writes** the result to Firestore
-5. **Removes** the Gmail label and records the message ID in the `processed_gmail_ids` Firestore collection
-
-The pipeline is fully serverless — it runs on GitHub Actions, so no local machine is needed.
-
----
-
-## Stack
-
-| Layer | Technology |
-|-------|-----------|
+| Capa | Tecnología |
+|------|-----------|
 | Frontend | React 19, Vite, Tailwind CSS |
-| Auth & DB | Firebase Auth + Firestore |
-| AI / LLM | Google Gemini API (`gemini-3.1-flash-lite`) |
-| Email pipeline | Python 3.12, Gmail API, BeautifulSoup |
-| Automation | GitHub Actions (scheduled workflow, every ~10 min) |
-| CI/CD | GitHub Actions (deploy to Firebase Hosting on merge to `main`) |
+| Auth y DB | Firebase Auth (Google) + Firestore, whitelist de emails |
+| IA | Google Gemini API (`gemini-3.1-flash-lite`) |
+| Pipeline de correos | Python 3.12, Gmail API, BeautifulSoup |
+| Automatización | GitHub Actions (cron ~10 min + deploy a Hosting en cada push a `main`) |
 
 ---
 
-## Features
+## Guía de montaje completa
 
-- **Automatic transaction import** from Gmail — zero manual entry
-- **Multi-context view** — personal, business, and unified finance tracking
-- **Budgets (Presupuestos)** — set and track spending limits by category
-- **Insights** — spending patterns and cash flow overview
-- **Serverless pipeline** — runs on GitHub Actions, no laptop required
-- **Cross-run deduplication** — processed email IDs stored in Firestore
+Todos los pasos que se hicieron para levantar esta instancia desde cero, con los problemas reales que aparecieron y su solución. Sirve como receta para reconstruirla o montar otra.
 
----
+### 1. Proyecto Firebase
 
-## Setup
+1. Crear proyecto en [console.firebase.google.com](https://console.firebase.google.com) (aquí: `mis-finanzas-6ed8d`).
+2. Habilitar **Authentication** → proveedor **Google**.
+3. Registrar una **app web** (ícono `</>` en la portada del proyecto) y copiar el `firebaseConfig`.
+4. Pegar el config en **dos** archivos: `src/firebase.js` y `public/firebase-messaging-sw.js` (el service worker lo duplica).
+5. Actualizar `.firebaserc` (project id) y, si se parte del repo original, simplificar `firebase.json` a un solo sitio de hosting y `deploy.yml` a un solo paso de deploy.
+6. No hace falta crear la base de Firestore a mano: el primer `firebase deploy --only firestore:rules` la crea.
 
-> **Full step-by-step setup** (GitHub secrets, OAuth token, Firestore rules): see [`SETUP_CRON.md`](./SETUP_CRON.md)
+> La API key web (`AIza...`) es pública por diseño — viaja en el bundle del navegador. La seguridad real está en las reglas de Firestore. Si GitHub abre una alerta de secret scanning por ella, se cierra como falso positivo.
 
-### Frontend — quick start
+### 2. CLI de Firebase y reglas
 
-**Prerequisites:** Node.js
+```bash
+npm install -g firebase-tools
+firebase login                    # cuenta dueña del proyecto
+firebase deploy --only firestore:rules
+```
+
+- `firebase login` necesita terminal interactiva.
+- Con varias cuentas en la máquina, `firebase login:use <email>` fija la cuenta para esta carpeta.
+
+### 3. Frontend local y primer login
 
 ```bash
 npm install
-npm run dev
+npm run dev                       # http://localhost:5173
 ```
 
-### Email pipeline
+El primer usuario que inicia sesión queda como admin: se crea el doc `finance_settings/users` con su email (`allowedEmails`). Desde entonces las reglas solo dejan pasar a los emails de esa lista.
 
-The sync runs automatically on GitHub Actions; see [`SETUP_CRON.md`](./SETUP_CRON.md) for the one-time setup. To run it locally for testing:
+**Gotcha**: si el login da "Error de servidor verificando permisos", casi seguro las reglas no están desplegadas (o la DB no existe) — volver al paso 2.
+
+### 4. Restricción de la API key (recomendado)
+
+En [Google Cloud → Credentials](https://console.cloud.google.com/apis/credentials) → la Browser key → **Restricciones de aplicaciones → Sitios web**, agregar:
+
+```
+localhost:5173
+mis-finanzas-6ed8d.web.app/*
+mis-finanzas-6ed8d.firebaseapp.com/*
+```
+
+**Gotcha importante**: el popup del login de Google corre en `*.firebaseapp.com` — si ese dominio falta, el login falla con *"The requested action is invalid"* aunque la app cargue bien. La propagación tarda unos minutos.
+
+### 5. Pipeline de Gmail (correo → Gemini → Firestore)
+
+Credenciales necesarias (una vez):
+
+1. **Gmail API**: habilitarla en [Google Cloud](https://console.cloud.google.com/apis/library/gmail.googleapis.com) (mismo proyecto).
+2. **OAuth Client** tipo *Desktop App* → descargar como `credentials.json` en la raíz del repo (queda gitignorado). **La pantalla de consentimiento debe publicarse "In production"** — en modo Testing, Google mata el refresh token a los 7 días y el sync se rompe en silencio.
+3. **API key de Gemini**: [AI Studio](https://aistudio.google.com/apikey). Las keys nuevas con formato `AQ.…` funcionan igual que las `AIza…`.
+4. **Clave del Admin SDK**: Firebase Console → Configuración → Cuentas de servicio → generar clave privada → guardar el JSON en la raíz (gitignorado; `utils.py` encuentra cualquier `*firebase-adminsdk*.json`).
+
+Secrets en GitHub (con `gh` autenticado en la cuenta dueña del fork):
 
 ```bash
-pip install -r requirements.txt
-# requires GEMINI_API_KEY and FIREBASE_ADMIN_SDK_JSON environment variables
-python3 gmail_finanzas_sync.py
+gh secret set GEMINI_API_KEY                                  # pegar la key
+gh secret set FIREBASE_ADMIN_SDK_JSON     < *firebase-adminsdk*.json
+gh secret set GMAIL_CREDENTIALS_JSON      < credentials.json
+```
+
+Token de Gmail (abre el navegador; autorizar con **la cuenta donde llegan los correos del banco**):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python bootstrap_token.py       # sube el token a Firestore (gmail_auth/token)
+```
+
+En Gmail (esa misma cuenta — las etiquetas son por cuenta):
+
+- Crear la etiqueta anidada **`Bancos/PendingBot`**.
+- Crear un filtro: remitente del banco → aplicar esa etiqueta.
+
+Probar de una vez, sin esperar al cron:
+
+```bash
+gh workflow run gmail_sync.yml            # disparo manual
+gh run watch                              # ver el resultado
+```
+
+**Gotchas**: el cron corre cada ~10 min pero GitHub puede atrasarlo; GitHub desactiva los crons tras 60 días sin commits (avisa por correo, se reactiva con un clic); si sale `invalid_grant`, re-ejecutar `bootstrap_token.py`.
+
+### 6. Hosting y deploy automático
+
+```bash
+npm run build && firebase deploy --only hosting   # deploy manual
+```
+
+Para el deploy automático (cada push a `main` corre lint + tests + build + deploy):
+
+```bash
+gh secret set FIREBASE_SERVICE_ACCOUNT_MIS_FINANZAS < *firebase-adminsdk*.json
+```
+
+La app queda en `https://<proyecto>.web.app` y `https://<proyecto>.firebaseapp.com` (dos alias del mismo sitio).
+
+### 7. Notificaciones push
+
+1. Firebase Console → Cloud Messaging → **Web Push certificates** → generar par de claves (VAPID).
+2. Localmente: `.env` con `VITE_FCM_VAPID_KEY=<clave>` (gitignorado). En CI: `gh secret set VITE_FCM_VAPID_KEY`.
+3. Rebuild + deploy.
+4. En el teléfono: abrir la app → Ajustes → Notificaciones → Activar.
+
+**Gotcha iPhone**: iOS solo permite push web desde la app **instalada como PWA** (Safari → Compartir → *Agregar a pantalla de inicio*, y abrirla desde ese ícono; requiere iOS 16.4+). En Safari normal el registro falla sin error visible.
+
+Prueba end-to-end:
+
+```bash
+.venv/bin/python send_test_push.py            # crea tx de prueba + push real
+.venv/bin/python send_test_push.py --cleanup  # borra la tx de prueba
 ```
 
 ---
 
-## CI/CD
+## Feature flags
 
-Merging a PR into `main` automatically triggers a deploy to Firebase Hosting via GitHub Actions.
+`src/config/features.js` — módulos ocultos de la UI sin borrar su implementación:
 
-```
-PR merged to main → GitHub Actions → Firebase Hosting deploy
-```
+| Flag | Estado | Qué oculta |
+|------|--------|-----------|
+| `business` | `false` | Contexto "Negocio": switcher Personal/General/Negocio, opción en el modal de transacción y en categorías. La app opera fija en `personal`. |
+| `health` | `false` | Dominio "Salud": tarjeta del inicio, ítem del sidebar y pestaña de Ajustes. |
 
-All significant changes must go through a PR — no direct pushes to `main`.
+Cambiar a `true` restaura el módulo completo. Ojo: con `business: false`, una transacción que Gemini clasifique como `business` no se muestra (el dato queda guardado).
 
 ---
 
-## Project Structure
+## Modelo de seguridad
+
+- **Whitelist server-side** (`firestore.rules`): solo los emails en `finance_settings/users` leen/escriben datos. El doc de whitelist solo lo leen sus miembros (los demás reciben `permission-denied`) y solo el email del dueño puede recrearlo si no existe.
+- `gmail_auth/` y `processed_gmail_ids/` son ilegibles desde el cliente; solo el Admin SDK del backend los toca.
+- API key restringida por dominio (paso 4).
+- Credenciales locales (`credentials.json`, `token.json`, `.env`, `*firebase-adminsdk*.json`) gitignoradas — verificar con `git ls-files` que nunca se versionen.
+
+---
+
+## Mantenimiento
+
+```bash
+gh run list --workflow=gmail_sync.yml     # estado del cron
+gh run view <id> --log-failed             # depurar una corrida fallida
+```
+
+- Reprocesar un correo: borrar su doc en `processed_gmail_ids` y re-aplicar la etiqueta en Gmail.
+- Traer mejoras del repo original: `git fetch upstream && git merge upstream/main` (el remote `upstream` ya está configurado). Los archivos con config propia (`src/firebase.js`, `firebase.json`, `deploy.yml`, `.firebaserc`) pueden dar conflicto — resolver conservando la config de este fork.
+
+---
+
+## Estructura
 
 ```
-├── src/                      # React frontend
-│   ├── components/           # Header, Sidebar, Transactions, Presupuestos, Insights
-│   ├── context/              # AuthContext, FinanceContext
-│   └── firebase.js           # Firebase config
-├── gmail_finanzas_sync.py    # AI pipeline (Gmail → Gemini → Firestore)
-├── utils.py                  # Shared Firestore connection helper
-├── bootstrap_token.py        # One-time: seed/refresh the Gmail OAuth token in Firestore
-├── bot_finanzas_ejemplo.py   # Local CLI for manual transaction entry
-├── requirements.txt          # Python dependencies
-├── .github/workflows/        # gmail_sync.yml (sync cron) + deploy.yml (hosting)
-└── SETUP_CRON.md             # Full pipeline setup and operations guide
+├── src/                      # Frontend React
+│   ├── domains/              # finance / health / tasks / habits
+│   ├── config/features.js    # Feature flags de visibilidad
+│   ├── context/AuthContext   # Login Google + whitelist
+│   └── firebase.js           # Config de Firebase (pública)
+├── gmail_finanzas_sync.py    # Pipeline: Gmail → Gemini → Firestore
+├── bootstrap_token.py        # Una vez: sembrar/renovar el token de Gmail
+├── send_test_push.py         # Prueba end-to-end de notificaciones
+├── firestore.rules           # Reglas de seguridad (whitelist)
+└── .github/workflows/        # gmail_sync.yml (cron) + deploy.yml (hosting)
 ```
