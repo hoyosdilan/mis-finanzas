@@ -20,7 +20,7 @@ Firestore
 React Dashboard
 ```
 
-A GitHub Actions workflow runs every ~10 minutes and processes any email tagged `Bancos/PendingBot` in Gmail:
+A GitHub Actions workflow runs every ~10 minutes and processes any email tagged with the configured Gmail label (default `Bancos/PendingBot`, editable in the app under Settings → Finanzas):
 
 1. **Fetches** emails via the Gmail API
 2. **Parses** the raw HTML body with BeautifulSoup
