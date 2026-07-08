@@ -43,10 +43,8 @@ const Divider = () => (
   <div style={{ width: 28, height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
 );
 
-export default function Sidebar({ activeView, activeDomain, onNavigate, onSwitchDomain }) {
+export default function Sidebar({ activeView, onNavigate }) {
   const { logout } = useAuth();
-
-  const isFinance = activeDomain === 'finance';
 
   return (
     <nav style={{
@@ -69,22 +67,9 @@ export default function Sidebar({ activeView, activeDomain, onNavigate, onSwitch
 
       {/* Nav items */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, alignItems: 'center', overflowY: 'auto' }}>
-        {/* Home */}
-        <RailItem icon="home" title="Inicio" active={activeDomain === 'home'} onClick={() => onSwitchDomain('home')} />
-
-        <Divider />
-
-        {/* Finance */}
-        <RailItem icon="insights"     title="Radiografía"  active={isFinance && activeView === 'insights'}     onClick={() => { onSwitchDomain('finance'); onNavigate('insights'); }} />
-        <RailItem icon="receipt_long" title="Movimientos"  active={isFinance && activeView === 'transactions'} onClick={() => { onSwitchDomain('finance'); onNavigate('transactions'); }} />
-        <RailItem icon="savings"      title="Presupuestos" active={isFinance && activeView === 'presupuestos'} onClick={() => { onSwitchDomain('finance'); onNavigate('presupuestos'); }} />
-
-        <Divider />
-
-        {/* Other domains */}
-        <RailItem icon="restaurant"         title="Salud"   active={activeDomain === 'health'}  onClick={() => onSwitchDomain('health')} />
-        <RailItem icon="check_circle"       title="Tareas"  active={activeDomain === 'tasks'}   onClick={() => onSwitchDomain('tasks')} />
-        <RailItem icon="local_fire_department" title="Hábitos" active={activeDomain === 'habits'} onClick={() => onSwitchDomain('habits')} />
+        <RailItem icon="insights"     title="Radiografía"  active={activeView === 'insights'}     onClick={() => onNavigate('insights')} />
+        <RailItem icon="receipt_long" title="Movimientos"  active={activeView === 'transactions'} onClick={() => onNavigate('transactions')} />
+        <RailItem icon="savings"      title="Presupuestos" active={activeView === 'presupuestos'} onClick={() => onNavigate('presupuestos')} />
 
         <Divider />
 
