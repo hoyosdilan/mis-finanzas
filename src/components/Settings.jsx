@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { useFinance } from '../context/FinanceContext';
-import { useHealth } from '../domains/health/context/HealthContext';
 import { useAuth } from '../context/AuthContext';
-import { Icon, Card, Eyebrow, IconTile, Segmented } from '../shared/ds/Primitives';
+import { Icon, Card, Eyebrow, Segmented } from '../shared/ds/Primitives';
 import ConfirmModal from '../shared/components/ConfirmModal';
 import { FEATURES } from '../config/features';
 
@@ -693,36 +694,230 @@ const NotificationsSection = ({ push }) => {
     );
 };
 
+// Config de instancia (etiqueta de Gmail del sync, tasa USD→COP) guardada en
+// finance_settings/default junto a los catálogos, vía el mismo updateAppConfig.
+const InstanceConfigSection = ({ appConfig, updateAppConfig }) => {
+    const [gmailLabel, setGmailLabel] = useState(appConfig.gmailLabel ?? '');
+    const [exchangeRate, setExchangeRate] = useState(appConfig.exchangeRate != null ? String(appConfig.exchangeRate) : '');
+    const [saving, setSaving] = useState(false);
+
+    // Resincroniza los inputs cuando el config termina de cargar de Firestore.
+    useEffect(() => { setGmailLabel(appConfig.gmailLabel ?? ''); }, [appConfig.gmailLabel]);
+    useEffect(() => { setExchangeRate(appConfig.exchangeRate != null ? String(appConfig.exchangeRate) : ''); }, [appConfig.exchangeRate]);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const rate = Number(exchangeRate);
+            await updateAppConfig({
+                ...appConfig,
+                gmailLabel: gmailLabel.trim(),
+                exchangeRate: rate > 0 ? rate : null,
+            });
+        } catch (error) { console.error("Error guardando config de instancia:", error); }
+        finally { setSaving(false); }
+    };
+
+    const FIELD_LABEL = {
+        fontSize: 11, fontWeight: 700, color: 'var(--fg-3)',
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+    };
+    const HINT = { fontSize: 11, color: 'var(--fg-4)', margin: '4px 0 0' };
+
+    return (
+        <div style={{
+            background: 'var(--bg-raised)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--r-2xl)',
+            padding: 20,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Icon name="tune" size={20} color="var(--clay-500)" />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--fg-1)' }}>Sincronización y moneda</h3>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <span style={FIELD_LABEL}>Etiqueta de Gmail del sync</span>
+                    <input
+                        type="text"
+                        placeholder="Bancos/PendingBot"
+                        style={INPUT_STYLE}
+                        value={gmailLabel}
+                        onChange={e => setGmailLabel(e.target.value)}
+                        disabled={saving}
+                    />
+                    <p style={HINT}>Etiqueta que el pipeline busca en Gmail. Vacío = usar la de por defecto (Bancos/PendingBot).</p>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <span style={FIELD_LABEL}>Tasa de cambio USD → COP</span>
+                    <input
+                        type="number"
+                        placeholder="4100"
+                        style={INPUT_STYLE}
+                        value={exchangeRate}
+                        onChange={e => setExchangeRate(e.target.value)}
+                        disabled={saving}
+                    />
+                    <p style={HINT}>Usada en Radiografía para convertir transacciones en USD. Vacío = 4100.</p>
+                </div>
+                <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saving}
+                    style={{
+                        alignSelf: 'flex-start', height: 38, padding: '0 18px', borderRadius: 'var(--r-lg)', border: 'none',
+                        background: 'var(--ink-800)', color: '#fff',
+                        fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12,
+                        cursor: saving ? 'wait' : 'pointer',
+                        opacity: saving ? 0.6 : 1,
+                    }}
+                >
+                    {saving ? 'Guardando…' : 'Guardar'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// Whitelist de acceso: finance_settings/users.allowedEmails. Las rules de
+// Firestore ya permiten update solo a usuarios que están en la lista.
+const WhitelistSection = () => {
+    const { currentUser } = useAuth();
+    const [emails, setEmails] = useState(null); // null = cargando
+    const [newEmail, setNewEmail] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [emailToRemove, setEmailToRemove] = useState(null);
+
+    useEffect(() => {
+        const ref = doc(db, 'finance_settings', 'users');
+        return onSnapshot(ref,
+            snap => setEmails(snap.exists() ? (snap.data().allowedEmails || []) : []),
+            error => { console.error("Error leyendo usuarios autorizados:", error); setEmails([]); },
+        );
+    }, []);
+
+    const save = async (list) => {
+        setBusy(true);
+        try {
+            await updateDoc(doc(db, 'finance_settings', 'users'), { allowedEmails: list });
+        } catch (error) { console.error("Error actualizando usuarios autorizados:", error); }
+        finally { setBusy(false); }
+    };
+
+    const handleAdd = async () => {
+        const email = newEmail.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert("Ingresa un correo válido."); return; }
+        if (emails.some(e => e.toLowerCase() === email)) { setNewEmail(''); return; }
+        await save([...emails, email]);
+        setNewEmail('');
+    };
+
+    const isSelf = (email) => email.toLowerCase() === (currentUser?.email || '').toLowerCase();
+
+    return (
+        <div style={{
+            background: 'var(--bg-raised)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--r-2xl)',
+            padding: 20,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Icon name="group" size={20} color="var(--clay-500)" />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--fg-1)' }}>Usuarios autorizados</h3>
+            </div>
+            <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--fg-3)' }}>
+                Cuentas de Google que pueden entrar a esta instancia.
+            </p>
+
+            {/* Add row */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input
+                    type="email"
+                    placeholder="correo@gmail.com"
+                    style={INPUT_STYLE}
+                    value={newEmail}
+                    onChange={e => setNewEmail(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                    disabled={busy || emails === null}
+                />
+                <button
+                    onClick={handleAdd}
+                    disabled={busy || emails === null || !newEmail.trim()}
+                    style={{
+                        width: 38, height: 38,
+                        background: busy || !newEmail.trim() ? 'var(--bg-sunken)' : 'var(--ink-800)',
+                        color: busy || !newEmail.trim() ? 'var(--fg-4)' : '#fff',
+                        borderRadius: 'var(--r-lg)', border: 'none', cursor: busy || !newEmail.trim() ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                    }}
+                >
+                    <Icon name="add" size={18} />
+                </button>
+            </div>
+
+            {/* List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {emails === null ? (
+                    <p style={{ fontSize: 12, color: 'var(--fg-4)', margin: 0 }}>Cargando…</p>
+                ) : emails.map((email) => (
+                    <div key={email} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '9px 10px',
+                        background: 'var(--bg-sunken)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--r-lg)',
+                    }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-1)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</span>
+                            {isSelf(email) && (
+                                <span style={{
+                                    fontSize: 10, fontWeight: 700, padding: '2px 6px',
+                                    background: 'var(--clay-50)', color: 'var(--clay-600)',
+                                    borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                }}>Tú</span>
+                            )}
+                        </span>
+                        {/* Sin auto-eliminación: quedaría fuera de su propia instancia. */}
+                        {!isSelf(email) && (
+                            <button
+                                onClick={() => setEmailToRemove(email)}
+                                disabled={busy}
+                                style={ICON_BTN({ color: 'var(--danger-700)' })}
+                                onMouseEnter={e => e.currentTarget.style.background = 'var(--danger-50)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                                <Icon name="delete" size={16} />
+                            </button>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            <ConfirmModal
+                isOpen={emailToRemove !== null}
+                onClose={() => setEmailToRemove(null)}
+                onConfirm={async () => {
+                    await save(emails.filter(e => e !== emailToRemove));
+                    setEmailToRemove(null);
+                }}
+                title="Quitar acceso"
+                message={`${emailToRemove} ya no podrá entrar a la app.`}
+                confirmText="Quitar"
+                isDestructive
+            />
+        </div>
+    );
+};
+
 export default function Settings({ push }) {
     const { appConfig, updateAppConfig } = useFinance();
-    const { settings: healthSettings, updateSettings: updateHealthSettings } = useHealth();
     const { currentUser, logout } = useAuth();
     const [saving, setSaving] = useState(false);
     const [newCurrency, setNewCurrency] = useState('');
     const [newAccount, setNewAccount] = useState('');
     const [activeTab, setActiveTab] = useState('account');
-    const [savingHealth, setSavingHealth] = useState(false);
-    const [calorieTarget, setCalorieTarget] = useState(() => String(healthSettings?.calorieTarget ?? 2000));
-    const [macroProtein, setMacroProtein] = useState(() => String(healthSettings?.macroTargets?.protein ?? 150));
-    const [macroCarbs, setMacroCarbs] = useState(() => String(healthSettings?.macroTargets?.carbs ?? 250));
-    const [macroFat, setMacroFat] = useState(() => String(healthSettings?.macroTargets?.fat ?? 65));
-
-    const handleSaveHealthSettings = async () => {
-        setSavingHealth(true);
-        try {
-            await updateHealthSettings({
-                ...healthSettings,
-                calorieTarget: Number(calorieTarget) || 2000,
-                macroTargets: {
-                    protein: Number(macroProtein) || 150,
-                    carbs: Number(macroCarbs) || 250,
-                    fat: Number(macroFat) || 65,
-                },
-            });
-        } finally {
-            setSavingHealth(false);
-        }
-    };
 
     const displayName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Usuario';
     const email = currentUser?.email || '';
@@ -793,9 +988,7 @@ export default function Settings({ push }) {
                 options={[
                     { value: 'account',  label: 'Cuenta' },
                     { value: 'finance',  label: 'Finanzas' },
-                    { value: 'health',   label: 'Salud' },
-                    { value: 'habits',   label: 'Hábitos' },
-                ].filter(t => FEATURES.health || t.value !== 'health')}
+                ]}
             />
 
             {/* CUENTA TAB */}
@@ -863,9 +1056,17 @@ export default function Settings({ push }) {
                 />
             </div>
 
+            {/* Instance config */}
+            <Eyebrow style={{ paddingLeft: 4, marginTop: 4 }}>Instancia</Eyebrow>
+            <InstanceConfigSection appConfig={appConfig} updateAppConfig={updateAppConfig} />
+
             </>}
-            {/* CUENTA TAB — part 2: notifications + logout */}
+            {/* CUENTA TAB — part 2: whitelist + notifications + logout */}
             {activeTab === 'account' && <>
+
+            {/* Access whitelist */}
+            <Eyebrow style={{ paddingLeft: 4, marginTop: 4 }}>Acceso</Eyebrow>
+            <WhitelistSection />
 
             {/* Notifications */}
             <Eyebrow style={{ paddingLeft: 4, marginTop: 4 }}>Avisos</Eyebrow>
@@ -884,75 +1085,6 @@ export default function Settings({ push }) {
                 <Icon name="logout" size={18} />
                 Cerrar sesión
             </button>
-            </>}
-
-            {/* SALUD TAB */}
-            {activeTab === 'health' && <>
-            <div>
-                <h3 style={{ margin: '0 0 16px', fontSize: 17, fontWeight: 800, color: 'var(--fg-1)' }}>Objetivos de salud</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Meta de calorías diarias (kcal)</span>
-                        <input
-                            type="number"
-                            value={calorieTarget}
-                            onChange={e => setCalorieTarget(e.target.value)}
-                            style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-default)', background: 'var(--bg-default)', borderRadius: 12, padding: '11px 12px', fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg-1)', outline: 'none' }}
-                            onFocus={e => e.target.style.borderColor = 'var(--clay-500)'}
-                            onBlur={e => e.target.style.borderColor = 'var(--border-default)'}
-                        />
-                    </div>
-                    <div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Macros diarios (gramos)</span>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                            {[
-                                { label: 'Proteína', value: macroProtein, set: setMacroProtein },
-                                { label: 'Carbos', value: macroCarbs, set: setMacroCarbs },
-                                { label: 'Grasa', value: macroFat, set: setMacroFat },
-                            ].map(m => (
-                                <div key={m.label}>
-                                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-3)', display: 'block', marginBottom: 5 }}>{m.label}</span>
-                                    <input
-                                        type="number"
-                                        value={m.value}
-                                        onChange={e => m.set(e.target.value)}
-                                        style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-default)', background: 'var(--bg-default)', borderRadius: 10, padding: '9px 10px', fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--fg-1)', outline: 'none' }}
-                                        onFocus={e => e.target.style.borderColor = 'var(--clay-500)'}
-                                        onBlur={e => e.target.style.borderColor = 'var(--border-default)'}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={handleSaveHealthSettings}
-                        disabled={savingHealth}
-                        style={{
-                            alignSelf: 'flex-start', height: 40, padding: '0 20px', borderRadius: 12, border: 'none',
-                            background: 'var(--olive-600, #5E6738)', color: '#fff',
-                            fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 13,
-                            cursor: savingHealth ? 'wait' : 'pointer',
-                            opacity: savingHealth ? 0.6 : 1,
-                        }}
-                    >
-                        {savingHealth ? 'Guardando…' : 'Guardar objetivos'}
-                    </button>
-                </div>
-            </div>
-            </>}
-
-            {/* HÁBITOS TAB */}
-            {activeTab === 'habits' && <>
-            <Card padding={20} variant="outlined">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <IconTile icon="local_fire_department" hue="clay" size={40} />
-                    <div>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--fg-1)' }}>Hábitos activos</div>
-                        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>Gestiona tus hábitos desde la pantalla principal de Hábitos.</div>
-                    </div>
-                </div>
-            </Card>
             </>}
 
         </div>

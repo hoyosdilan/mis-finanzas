@@ -1,5 +1,9 @@
 /* global firebase, importScripts, clients */
-/* Service Worker de Firebase Cloud Messaging.
+/* Plantilla del Service Worker de Firebase Cloud Messaging.
+ * El SW no pasa por Vite y no puede leer import.meta.env, así que
+ * scripts/generate-sw.mjs (prebuild/predev) reemplaza los placeholders
+ * __VITE_FIREBASE_*__ con los valores de .env / variables de entorno y
+ * escribe public/firebase-messaging-sw.js (gitignorado).
  * Servido desde la raíz (/firebase-messaging-sw.js) con scope "/".
  * Usa la build "compat" desde gstatic; la versión DEBE coincidir con la del
  * paquete npm `firebase` (ver package.json). Si se actualiza firebase, hay que
@@ -9,12 +13,12 @@ importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-    apiKey: 'AIzaSyDE6Z3lBYL9t5ICSHh3nM7BJcuDJ98o9PI',
-    authDomain: 'mis-finanzas-6ed8d.firebaseapp.com',
-    projectId: 'mis-finanzas-6ed8d',
-    storageBucket: 'mis-finanzas-6ed8d.firebasestorage.app',
-    messagingSenderId: '342564772518',
-    appId: '1:342564772518:web:73b52571560acb385ef267',
+    apiKey: '__VITE_FIREBASE_API_KEY__',
+    authDomain: '__VITE_FIREBASE_AUTH_DOMAIN__',
+    projectId: '__VITE_FIREBASE_PROJECT_ID__',
+    storageBucket: '__VITE_FIREBASE_STORAGE_BUCKET__',
+    messagingSenderId: '__VITE_FIREBASE_MESSAGING_SENDER_ID__',
+    appId: '__VITE_FIREBASE_APP_ID__',
 });
 
 const messaging = firebase.messaging();

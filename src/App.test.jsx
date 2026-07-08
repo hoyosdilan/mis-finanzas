@@ -55,10 +55,6 @@ vi.mock('./shared/components/Header', () => ({
   default: () => <div data-testid="header-component">Header</div>,
 }));
 
-vi.mock('./shared/components/HomeScreen', () => ({
-  default: () => <div data-testid="home-component">Home</div>,
-}));
-
 vi.mock('./components/Settings', () => ({
   default: () => <div data-testid="settings-component">Settings</div>,
 }));

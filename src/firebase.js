@@ -2,13 +2,16 @@ import { initializeApp } from 'firebase/app';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
+// Config del proyecto Firebase: viene de .env (local) o de GitHub Variables
+// (CI). Ver .env.example. El config web no es secreto, pero se externaliza
+// para que cada instancia apunte a su propio proyecto.
 const firebaseConfig = {
-    projectId: "mis-finanzas-6ed8d",
-    appId: "1:342564772518:web:73b52571560acb385ef267",
-    storageBucket: "mis-finanzas-6ed8d.firebasestorage.app",
-    apiKey: "AIzaSyDE6Z3lBYL9t5ICSHh3nM7BJcuDJ98o9PI",
-    authDomain: "mis-finanzas-6ed8d.firebaseapp.com",
-    messagingSenderId: "342564772518"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);

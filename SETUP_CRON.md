@@ -9,7 +9,7 @@ There is no local machine or cron involved — once set up, it runs entirely on 
 ## How it works
 
 1. The `Gmail Finance Sync` workflow (`.github/workflows/gmail_sync.yml`) triggers every ~10 minutes
-2. It polls Gmail for emails labeled `Bancos/PendingBot`
+2. It polls Gmail for emails with the configured label — `gmailLabel` in `finance_settings/default`, editable in the app under Settings → Finanzas (default: `Bancos/PendingBot`)
 3. Each email body is sent to Gemini (`gemini-3.1-flash-lite`), which returns a structured transaction
 4. The transaction is saved to the `finance_transactions` Firestore collection
 5. The Gmail label is removed and the message ID is recorded in `processed_gmail_ids`
@@ -100,7 +100,7 @@ gh run view <run-id> --log                 # full log of a run
 gh run view <run-id> --log-failed          # only the failed steps
 ```
 
-To reprocess an email: delete its doc from the `processed_gmail_ids` collection and re-apply the `Bancos/PendingBot` label in Gmail.
+To reprocess an email: delete its doc from the `processed_gmail_ids` collection and re-apply the sync label in Gmail.
 
 ### Common failure: `invalid_grant`
 

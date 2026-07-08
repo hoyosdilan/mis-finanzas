@@ -30,7 +30,9 @@ BOGOTA = datetime.timezone(datetime.timedelta(hours=-5))
 # Permisos necesarios para leer labels y modificar (quitar) etiquetas
 GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
-# Etiqueta por defecto a buscar
+# Etiqueta por defecto a buscar (se puede sobreescribir con gmailLabel en
+# finance_settings/default — editable en la app en Settings → Finanzas — o con
+# el flag --label, que tiene prioridad sobre ambos)
 DEFAULT_LABEL = "Bancos/PendingBot"
 
 # Modelo de Gemini
@@ -490,10 +492,25 @@ def reprocess_last_emails(db, service, client, n, dry_run):
     print("\n🧪 Fin del modo prueba.")
 
 
+def get_configured_label(db):
+    """Etiqueta configurada en la app (Settings → Finanzas), con fallback a la
+    de por defecto si el campo no existe, está vacío o Firestore no responde."""
+    try:
+        doc = db.collection('finance_settings').document('default').get()
+        if doc.exists:
+            label = (doc.to_dict().get('gmailLabel') or '').strip()
+            if label:
+                return label
+    except Exception as e:
+        print(f"⚠️ No se pudo leer gmailLabel de Firestore ({e}); uso '{DEFAULT_LABEL}'.")
+    return DEFAULT_LABEL
+
+
 def main():
     parser = argparse.ArgumentParser(description="Automatización de Gmail a Firestore con Gemini")
-    parser.add_argument('--label', default=DEFAULT_LABEL,
-                        help=f"Nombre de la etiqueta en Gmail (por defecto: '{DEFAULT_LABEL}')")
+    parser.add_argument('--label', default=None,
+                        help="Nombre de la etiqueta en Gmail. Si se omite, usa gmailLabel de "
+                             f"finance_settings/default en Firestore, o '{DEFAULT_LABEL}'.")
     parser.add_argument('--reprocess-last', type=int, default=0, metavar='N',
                         help="Modo PRUEBA: re-procesa los últimos N correos ya procesados (no toca la etiqueta).")
     parser.add_argument('--dry-run', action='store_true',
@@ -517,7 +534,7 @@ def main():
         reprocess_last_emails(db, service, client, args.reprocess_last, args.dry_run)
         return
 
-    label_name = args.label
+    label_name = args.label or get_configured_label(db)
     print(f"🔍 Buscando el ID interno para la etiqueta '{label_name}'...")
     label_id = get_label_id(service, label_name)
     if not label_id:

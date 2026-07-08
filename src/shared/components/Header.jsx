@@ -1,16 +1,6 @@
 import React from 'react';
-import { Icon } from '../ds/Primitives';
 
-const DOMAIN_LABELS = {
-  finance: 'Finanzas',
-  health:  'Salud',
-  tasks:   'Tareas',
-  habits:  'Hábitos',
-};
-
-export default function Header({ domain = 'home', onHome }) {
-  const domainLabel = DOMAIN_LABELS[domain];
-
+export default function Header() {
   return (
     <header style={{
       position: 'sticky', top: 0, zIndex: 40,
@@ -34,35 +24,15 @@ export default function Header({ domain = 'home', onHome }) {
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--fg-1)', lineHeight: 1.1, letterSpacing: '-0.01em' }}>
-            {domainLabel || 'Mis Finanzas'}
+            Mis Finanzas
           </div>
           <div style={{
             fontSize: 9, fontWeight: 800, letterSpacing: '0.14em',
             textTransform: 'uppercase', color: 'var(--fg-4)', marginTop: 1,
           }}>
-            {domainLabel ? 'Dashboard personal' : 'Todo en un lugar'}
+            Dashboard personal
           </div>
         </div>
-
-        {domain !== 'home' && onHome && (
-          <button
-            type="button"
-            onClick={onHome}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '6px 12px', borderRadius: 9999, border: 'none', cursor: 'pointer',
-              background: 'var(--bg-sunken)', color: 'var(--fg-2)',
-              fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12,
-              flexShrink: 0,
-              transition: 'background var(--dur-fast) var(--ease-out)',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--border-default)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-sunken)'}
-          >
-            <Icon name="arrow_back" size={15} />
-            Inicio
-          </button>
-        )}
       </div>
     </header>
   );
