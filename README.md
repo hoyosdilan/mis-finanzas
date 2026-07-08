@@ -66,8 +66,36 @@ The pipeline is fully serverless — it runs on GitHub Actions, so no local mach
 
 ```bash
 npm install
+cp .env.example .env   # populate with your Firebase web config
 npm run dev
 ```
+
+`npm run dev` / `npm run build` generate `public/firebase-messaging-sw.js` from
+`sw/firebase-messaging-sw.template.js` using your `.env` values (the service
+worker can't read Vite env vars, so it's templated at build time).
+
+### Install your own instance
+
+The app is self-hostable — each instance runs against its own Firebase project:
+
+1. **Create a Firebase project** (free Spark plan works) with:
+   - **Authentication** → sign-in method **Google** enabled
+   - **Cloud Firestore** enabled (deploy the rules: `firebase deploy --only firestore`)
+2. **Register a Web App** in the project settings and copy its config into `.env`
+   (see `.env.example` for the variable names).
+3. **Push notifications (optional):** Firebase Console → Cloud Messaging → Web Push
+   certificates → generate a key pair, and set `VITE_FCM_VAPID_KEY` in `.env`.
+4. **Point hosting at your site:** edit `.firebaserc` — set your project ID as
+   `default` and your Hosting site under the `finanzas` target.
+5. **CI/CD (optional):** in your GitHub repo, set
+   - **Variables:** the six `VITE_FIREBASE_*` values from `.env` (they are not secret)
+   - **Secrets:** `VITE_FCM_VAPID_KEY`, plus a Firebase Hosting service account under
+     the name referenced by `.github/workflows/deploy.yml`
+     (`firebase init hosting:github` can generate it)
+6. **First login = admin:** the first Google account that signs in bootstraps the
+   `finance_settings/users` whitelist automatically; add more allowed emails from there.
+7. **Gmail sync pipeline (optional):** set the `GEMINI_API_KEY` and
+   `FIREBASE_ADMIN_SDK_JSON` secrets and follow [`SETUP_CRON.md`](./SETUP_CRON.md).
 
 ### Email pipeline
 
@@ -100,10 +128,10 @@ All significant changes must go through a PR — no direct pushes to `main`.
 │   ├── components/           # Header, Sidebar, Transactions, Presupuestos, Insights
 │   ├── context/              # AuthContext, FinanceContext
 │   └── firebase.js           # Firebase config
+├── sw/                       # Service worker template (config injected at build)
 ├── gmail_finanzas_sync.py    # AI pipeline (Gmail → Gemini → Firestore)
 ├── utils.py                  # Shared Firestore connection helper
 ├── bootstrap_token.py        # One-time: seed/refresh the Gmail OAuth token in Firestore
-├── bot_finanzas_ejemplo.py   # Local CLI for manual transaction entry
 ├── requirements.txt          # Python dependencies
 ├── .github/workflows/        # gmail_sync.yml (sync cron) + deploy.yml (hosting)
 └── SETUP_CRON.md             # Full pipeline setup and operations guide
