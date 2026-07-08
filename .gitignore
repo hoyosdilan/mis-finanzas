@@ -29,11 +29,18 @@ dist-ssr
 !package-lock.json
 gmail_sync.lock
 !firebase.json
+!firestore.indexes.json
 
+# Caché local de firebase-tools
+.firebase/
+
+# Generado por scripts/generate-sw.mjs (prebuild/predev)
+public/firebase-messaging-sw.js
 
 # Env (la VAPID public no es secreta, pero igual no se versiona)
 .env
 .env.*
+!.env.example
 
 # Python
 __pycache__/
