@@ -76,6 +76,10 @@ worker can't read Vite env vars, so it's templated at build time).
 
 ### Install your own instance
 
+> Already running an instance cloned **before July 2026** (pre `.env` refactor)?
+> Follow [`UPGRADING.md`](./UPGRADING.md) to pull the latest changes without
+> losing your Firebase config or data.
+
 The app is self-hostable — each instance runs against its own Firebase project:
 
 1. **Create a Firebase project** (free Spark plan works) with:
