@@ -118,7 +118,7 @@ gh workflow run gmail_sync.yml            # disparo manual
 gh run watch                              # ver el resultado
 ```
 
-**Gotchas**: el cron corre cada ~10 min pero GitHub puede atrasarlo; GitHub desactiva los crons tras 60 días sin commits (avisa por correo, se reactiva con un clic); si sale `invalid_grant`, re-ejecutar `bootstrap_token.py`.
+**Gotchas**: en un **fork**, GitHub deja los workflows programados en estado `disabled_fork` — el cron nunca corre hasta habilitarlo (`gh workflow enable gmail_sync.yml`), aunque los disparos manuales sí funcionen y enmascaren el problema; el cron corre cada ~10 min pero GitHub puede atrasarlo; GitHub desactiva los crons tras 60 días sin commits (avisa por correo, se reactiva con un clic); si sale `invalid_grant`, re-ejecutar `bootstrap_token.py`. Verificar el estado real con `gh api repos/<owner>/<repo>/actions/workflows --jq '.workflows[] | "\(.name): \(.state)"'`.
 
 ### 6. Hosting y deploy automático
 
