@@ -9,10 +9,13 @@ PDF corporativo simple con el detalle y el total.
 Self-contained: reutiliza la conexión a Firestore (utils.conectar_db) y el token
 de Gmail ya guardado, sin depender del pipeline de IA.
 
+Script personal/opcional: asume el formato de notificaciones de Bancolombia.
+La cuenta destino es obligatoria.
+
 Uso:
-    python3 scripts/reporte_transferencias.py
-    python3 scripts/reporte_transferencias.py --account 3114096566 --after 2026/01/01
-    python3 scripts/reporte_transferencias.py --out ~/Desktop/reporte.pdf
+    python3 scripts/reporte_transferencias.py --account 1234567890
+    python3 scripts/reporte_transferencias.py --account 1234567890 --after 2026/01/01
+    python3 scripts/reporte_transferencias.py --account 1234567890 --out ~/Desktop/reporte.pdf
 
 Dependencias: firebase-admin, google-api-python-client, google-auth,
 beautifulsoup4, reportlab.
@@ -216,7 +219,7 @@ def build_pdf(rows, account, after, out_path, n_emails, unmatched):
 
 def main():
     ap = argparse.ArgumentParser(description="Reporte PDF de transferencias a una cuenta (vía Gmail).")
-    ap.add_argument('--account', default='3114096566', help="Cuenta destino a buscar.")
+    ap.add_argument('--account', required=True, help="Cuenta destino a buscar.")
     ap.add_argument('--after', default='2026/01/01', help="Fecha desde (YYYY/MM/DD).")
     ap.add_argument('--out', default=None, help="Ruta del PDF de salida.")
     args = ap.parse_args()

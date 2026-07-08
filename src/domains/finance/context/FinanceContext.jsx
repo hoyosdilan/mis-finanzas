@@ -11,6 +11,9 @@ export const useFinance = () => useContext(FinanceContext);
 const DEFAULT_CONFIG = {
     currencies: ['COP', 'USD', 'EUR'],
     accounts: ['Efectivo', 'Tarjeta de Crédito Principal', 'Cuenta Bancaria'],
+    // Config de instancia (editable en Settings → Finanzas)
+    gmailLabel: 'Bancos/PendingBot',
+    exchangeRate: 4100,
     categories: [
         { name: 'Comida', subcategories: [], icon: 'restaurant', type: 'debit', context: 'personal' },
         { name: 'Transporte', subcategories: [], icon: 'directions_car', type: 'debit', context: 'personal' },

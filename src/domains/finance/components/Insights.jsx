@@ -8,16 +8,21 @@ import {
 import ContextSwitcher from './ContextSwitcher';
 import CompactTransactions from './CompactTransactions';
 
-const EXCHANGE_RATE = 4100;
+const DEFAULT_EXCHANGE_RATE = 4100;
 const DAY_MS = 86400000;
 
 const isTransferTx = (t) => t.type === 'transfer' || t.isTransfer === true;
-const toCOP = (t) => (t.currency === 'USD' ? t.amount * EXCHANGE_RATE : t.amount);
+const toCOP = (t, rate) => (t.currency === 'USD' ? t.amount * rate : t.amount);
 const txDate = (t) => (t.date?.toDate ? t.date.toDate() : new Date(t.date));
 const midnight = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
 
 export default function Insights({ onNavigate, onEditTransaction }) {
-  const { transactions, loading, currentContext } = useFinance();
+  const { transactions, loading, currentContext, appConfig } = useFinance();
+
+  // Tasa USD→COP configurable en Settings → Finanzas; fallback al valor histórico.
+  const exchangeRate = Number(appConfig?.exchangeRate) > 0
+    ? Number(appConfig.exchangeRate)
+    : DEFAULT_EXCHANGE_RATE;
 
   const filtered = useMemo(() => (
     transactions.filter(t => {
@@ -41,10 +46,10 @@ export default function Insights({ onNavigate, onEditTransaction }) {
     filtered.forEach(t => {
       if (t.type !== 'debit' || isTransferTx(t)) return;
       const idx = Math.floor((midnight(txDate(t)) - start) / DAY_MS);
-      if (idx >= 0 && idx < 30) arr[idx] += toCOP(t);
+      if (idx >= 0 && idx < 30) arr[idx] += toCOP(t, exchangeRate);
     });
     return arr;
-  }, [filtered, today]);
+  }, [filtered, today, exchangeRate]);
 
   const todayTotal = daily[29];
   const todayCount = useMemo(() => (
@@ -61,7 +66,7 @@ export default function Insights({ onNavigate, onEditTransaction }) {
     let spent = 0, income = 0, prevSpent = 0, prevIncome = 0;
     filtered.forEach(t => {
       if (isTransferTx(t)) return;
-      const d = txDate(t), amt = toCOP(t);
+      const d = txDate(t), amt = toCOP(t, exchangeRate);
       if (inMonth(d)) {
         if (t.type === 'debit') spent += amt;
         if (t.type === 'credit') income += amt;
@@ -77,7 +82,7 @@ export default function Insights({ onNavigate, onEditTransaction }) {
       spentDelta: prevSpent > 0 ? ((spent - prevSpent) / prevSpent) * 100 : 0,
       incomeDelta: prevIncome > 0 ? ((income - prevIncome) / prevIncome) * 100 : 0,
     };
-  }, [filtered, month, year, prevMonth, prevMonthYear]);
+  }, [filtered, month, year, prevMonth, prevMonthYear, exchangeRate]);
 
   // Registration streak (consecutive days with at least one transaction)
   const streak = useMemo(() => {
@@ -99,7 +104,7 @@ export default function Insights({ onNavigate, onEditTransaction }) {
 
     // Top expense category this month
     const cats = {};
-    monthTxs.forEach(t => { const c = t.category || 'general'; cats[c] = (cats[c] || 0) + toCOP(t); });
+    monthTxs.forEach(t => { const c = t.category || 'general'; cats[c] = (cats[c] || 0) + toCOP(t, exchangeRate); });
     const topCat = Object.entries(cats).sort(([, a], [, b]) => b - a)[0];
     if (topCat && monthAgg.spent > 0) {
       list.push({
@@ -128,16 +133,16 @@ export default function Insights({ onNavigate, onEditTransaction }) {
       if (t.type !== 'debit' || isTransferTx(t)) return false;
       return (midnight(today) - midnight(txDate(t))) / DAY_MS < 30;
     });
-    const biggest = recent.sort((a, b) => toCOP(b) - toCOP(a))[0];
+    const biggest = recent.sort((a, b) => toCOP(b, exchangeRate) - toCOP(a, exchangeRate))[0];
     if (biggest) {
       list.push({
         tone: 'var(--amber-300)', icon: 'schedule', titleColor: 'var(--ink-700)',
         title: `Tu mayor fuga: ${biggest.title}`,
-        body: `${formatCurrency(toCOP(biggest), 'COP')} · ${txDate(biggest).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}.`,
+        body: `${formatCurrency(toCOP(biggest, exchangeRate), 'COP')} · ${txDate(biggest).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}.`,
       });
     }
     return list;
-  }, [filtered, month, year, monthAgg, today, onNavigate]);
+  }, [filtered, month, year, monthAgg, today, onNavigate, exchangeRate]);
 
   // This-month spending grouped by category — entry point to the category heatmap
   const categoryBreakdown = useMemo(() => {
@@ -147,13 +152,13 @@ export default function Insights({ onNavigate, onEditTransaction }) {
       const d = txDate(t);
       if (d.getMonth() !== month || d.getFullYear() !== year) return;
       const name = t.category || 'General';
-      cats[name] = (cats[name] || 0) + toCOP(t);
+      cats[name] = (cats[name] || 0) + toCOP(t, exchangeRate);
     });
     const total = Object.values(cats).reduce((a, b) => a + b, 0);
     return Object.entries(cats)
       .sort(([, a], [, b]) => b - a)
       .map(([name, amount]) => ({ name, amount, pct: total > 0 ? (amount / total) * 100 : 0 }));
-  }, [filtered, month, year]);
+  }, [filtered, month, year, exchangeRate]);
 
   const labels7 = useMemo(() => {
     const out = [];
