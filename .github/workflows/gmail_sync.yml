@@ -2,9 +2,9 @@ name: Gmail Finance Sync
 
 on:
   schedule:
-    # Cada 10 minutos. Nota: GitHub Actions puede retrasar las ejecuciones
-    # programadas varios minutos cuando hay carga alta.
-    - cron: '*/10 * * * *'
+    # Cada ~10 minutos, en minutos "impares": los crons en :00/:10/:20...
+    # compiten con miles de workflows y GitHub los retrasa mucho más.
+    - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch:
 
 # Evita que dos ejecuciones se solapen (procesarían el mismo correo a la vez).
