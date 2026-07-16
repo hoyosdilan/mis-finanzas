@@ -16,10 +16,14 @@ const DEFAULT_CONFIG = {
     gmailLabel: 'Bancos/PendingBot',
     exchangeRate: 4100,
     categories: [
-        { name: 'Comida', subcategories: [], icon: 'restaurant', type: 'debit', context: 'personal' },
-        { name: 'Transporte', subcategories: [], icon: 'directions_car', type: 'debit', context: 'personal' },
-        { name: 'Servicios', subcategories: [], icon: 'bolt', type: 'debit', context: 'personal' },
-        { name: 'Ingresos', subcategories: [], icon: 'payments', type: 'credit', context: 'personal' }
+        { name: 'Hogar', subcategories: ['Arriendo', 'Servicios Públicos', 'Internet', 'Plan Celular', 'Mercado', 'Aseo', 'Mantenimiento', 'Muebles', 'Utensilios y accesorios'], icon: 'home', type: 'debit', context: 'personal' },
+        { name: 'Comida', subcategories: ['Domicilios / Rappi', 'Restaurantes / Cafés'], icon: 'restaurant', type: 'debit', context: 'personal' },
+        { name: 'Transporte', subcategories: ['Uber / Taxi', 'Metro / Bus', 'Gasolina / Peajes', 'Mantenimiento Vehículo', 'Vuelos', 'Alquiler Vehiculo', 'Parqueadero'], icon: 'directions_car', type: 'debit', context: 'personal' },
+        { name: 'Salud y Bienestar', subcategories: ['Citas Médicas / Copagos', 'Medicamentos / Farmacia', 'Cuidado Personal (Barbería, peluquería, masajes)', 'Gym'], icon: 'fitness_center', type: 'debit', context: 'personal' },
+        { name: 'Estilo de Vida y Ocio', subcategories: ['Citas / Pareja', 'Suscripciones', 'Compras / Ropa / Gadgets', 'Entretenimiento (Cine, conciertos, rumba)', 'Regalos'], icon: 'shopping_bag', type: 'debit', context: 'personal' },
+        { name: 'Financiero y Deudas', subcategories: ['Intereses / Comisiones', 'Seguros', 'Impuestos Personales', 'Prestamo', 'Pago a Créditos', 'Pago a Tarjetas'], icon: 'account_balance', type: 'debit', context: 'personal' },
+        { name: 'Ingresos', subcategories: ['Salario', 'Ventas', 'Rendimientos / Intereses', 'Cashbacks / Devoluciones'], icon: 'payments', type: 'credit', context: 'both' },
+        { name: 'Operación', subcategories: ['SaaS / Software', 'Equipos / Máquinas', 'Materiales / Insumos', 'Nómina', 'Impuestos (IVA, Renta)', 'Comisiones Bancarias / Pasarelas de Pago', 'Procesamiento'], icon: 'storefront', type: 'debit', context: 'business' }
     ]
 };
 
