@@ -242,7 +242,14 @@ Transacciones recientes (muestra adicional para inferir contexto):
 {json.dumps(recientes, ensure_ascii=False, indent=2)}
 
 Reglas para los campos:
-- type: 'debit' (gasto), 'credit' (ingreso) o 'ignore' (fallida/declinada o no-transacción).
+- type: 'debit' (gasto), 'credit' (ingreso), 'transfer' (movimiento entre cuentas PROPIAS del
+  usuario) o 'ignore' (fallida/declinada o no-transacción).
+- 'transfer' aplica sobre todo al PAGO DE LA TARJETA DE CRÉDITO del usuario ("Pago de tarjeta",
+  "Abono a tarjeta", pago a una tarjeta terminada en ****): NO es un gasto (las compras ya se
+  registraron una a una); es plata que sale de la cuenta bancaria para bajar la deuda de la
+  tarjeta. En ese caso: card = la cuenta de ORIGEN (ej. 'Cuenta Bancaria') y
+  destinationCard = la cuenta de DESTINO (ej. 'Tarjeta de Crédito Principal'), ambas de {cuentas}.
+- destinationCard: SOLO para type 'transfer'; en 'debit'/'credit' devuelve "".
 - amount: el monto numérico exacto, positivo y sin símbolos de moneda.
 - title: un resumen muy corto del concepto/comercio. Si el comercio aparece en la memoria, titúlalo igual que ahí.
 - currency: elige una opción de {monedas}, o 'COP' si el texto usa $, pesos, etc.
@@ -259,7 +266,7 @@ Texto del correo:
 "{texto}"
 
 Devuelve solo el JSON, sin explicación ni markdown. Formato esperado:
-{{"type": "", "amount": 0, "title": "", "currency": "", "category": "", "subcategory": "", "card": "", "context": "", "comments": ""}}
+{{"type": "", "amount": 0, "title": "", "currency": "", "category": "", "subcategory": "", "card": "", "destinationCard": "", "context": "", "comments": ""}}
 
 Si la transacción no fue exitosa o no es una transacción individual, devuelve únicamente:
 {{"type": "ignore"}}
@@ -334,8 +341,14 @@ def registrar_transaccion(datos_ia, tx_dt, db, cat_tree, dry_run=False):
         print(f"⚠️ La IA devolvió un contexto inválido '{context}'. Se usa 'personal'.")
         context = 'personal'
 
+    # Validar type
+    tx_type = datos_ia.get('type', 'debit')
+    if tx_type not in ('debit', 'credit', 'transfer'):
+        print(f"⚠️ La IA devolvió un type inválido '{tx_type}'. Se usa 'debit'.")
+        tx_type = 'debit'
+
     nueva_transaccion = {
-        "type": datos_ia.get('type', 'debit'),
+        "type": tx_type,
         "amount": float(datos_ia.get('amount', 0)),
         "currency": datos_ia.get('currency', 'COP'),
         "title": datos_ia.get('title', 'Sin concepto especificado'),
@@ -352,6 +365,10 @@ def registrar_transaccion(datos_ia, tx_dt, db, cat_tree, dry_run=False):
         # manual en la app; se marcan como 'reviewed' al editarlas/guardarlas.
         "status": "pending",
     }
+
+    # Las transferencias (p. ej. pago de la tarjeta de crédito) llevan cuenta destino.
+    if tx_type == 'transfer':
+        nueva_transaccion["destinationCard"] = datos_ia.get('destinationCard', '') or ''
 
     print("\n📦 Datos a guardar en Firebase:")
     for k, v in nueva_transaccion.items():
@@ -388,7 +405,8 @@ def enviar_push_pending(db, tx_id, tx):
         print("ℹ️ No hay dispositivos suscritos a notificaciones. Se omite push.")
         return
 
-    signo = '-' if tx.get('type') == 'debit' else '+'
+    tipo = tx.get('type')
+    signo = '-' if tipo == 'debit' else ('⇄ ' if tipo == 'transfer' else '+')
     try:
         monto = f"{signo}{float(tx.get('amount', 0)):,.0f} {tx.get('currency', 'COP')}"
     except (TypeError, ValueError):
