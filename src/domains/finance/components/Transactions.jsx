@@ -508,17 +508,18 @@ export default function Transactions({ onNavigate, onEditTransaction }) {
                 <IconTile icon={txIcon(tx)} hue={hueForCategory(tx.category)} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--fg-3)', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{format(tx.date, 'dd MMM', { locale: es })}</span>
+                    {/* Pendiente va como ícono aquí: un pill junto al título dejaría el título sin espacio */}
+                    {pending && <Icon name="rate_review" size={13} color="var(--warning-700)" style={{ flexShrink: 0 }} />}
+                    <span style={{ fontFamily: 'var(--font-mono)', flexShrink: 0, color: pending ? 'var(--warning-700)' : undefined, fontWeight: pending ? 700 : undefined }}>
+                      {format(tx.date, 'dd MMM', { locale: es })}
+                    </span>
                     <span aria-hidden>·</span>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {tx.category || 'General'}{tx.subcategory ? ` · ${tx.subcategory}` : ''}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                    <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {tx.title || tx.description}
-                    </span>
-                    {pending && <Pill variant="warning" icon="rate_review">Por revisar</Pill>}
+                  <div style={{ marginTop: 2, fontWeight: 700, fontSize: 14, color: 'var(--fg-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {tx.title || tx.description}
                   </div>
                   <div style={{ marginTop: 2, fontSize: 11, color: 'var(--fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {isTransfer
