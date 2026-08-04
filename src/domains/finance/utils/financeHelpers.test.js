@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { normalizeCategory, parseTransactionDate, calculateBalances } from './financeHelpers';
+import { normalizeCategory, parseTransactionDate, calculateBalances, calcGoalSavings } from './financeHelpers';
 
 // ─────────────────────────────────────────────────
 // normalizeCategory
@@ -221,5 +221,68 @@ describe('calculateBalances', () => {
         expect(result.personalBalance.COP).toBe(40000);
         expect(result.netWorth.USD).toBe(5000);
         expect(result.businessCashFlow.USD).toBe(5000);
+    });
+});
+
+// ─────────────────────────────────────────────────
+// calcGoalSavings
+// ─────────────────────────────────────────────────
+describe('calcGoalSavings', () => {
+    const CUENTA = 'Bancolombia Ahorros *1234';
+
+    it('sums manual abonos when goal has no linked account', () => {
+        const goal = { abonos: [{ monto: 100 }, { monto: 250 }] };
+        expect(calcGoalSavings(goal, [])).toBe(350);
+    });
+
+    it('returns 0 for a goal without abonos nor account', () => {
+        expect(calcGoalSavings({}, [])).toBe(0);
+    });
+
+    it('adds transfers into the linked account', () => {
+        const goal = { cuenta: CUENTA };
+        const txs = [
+            { type: 'transfer', amount: 500, card: 'Otra', destinationCard: CUENTA },
+            { type: 'transfer', amount: 200, card: 'Otra', destinationCard: CUENTA },
+        ];
+        expect(calcGoalSavings(goal, txs)).toBe(700);
+    });
+
+    it('subtracts transfers out of the linked account', () => {
+        const goal = { cuenta: CUENTA };
+        const txs = [
+            { type: 'transfer', amount: 500, card: 'Otra', destinationCard: CUENTA },
+            { type: 'transfer', amount: 300, card: CUENTA, destinationCard: 'Otra' },
+        ];
+        expect(calcGoalSavings(goal, txs)).toBe(200);
+    });
+
+    it('ignores credits and debits on the linked account', () => {
+        const goal = { cuenta: CUENTA };
+        const txs = [
+            { type: 'credit', amount: 4800000, card: CUENTA },
+            { type: 'debit', amount: 50000, card: CUENTA },
+        ];
+        expect(calcGoalSavings(goal, txs)).toBe(0);
+    });
+
+    it('combines abonos and net transfer flow', () => {
+        const goal = { cuenta: CUENTA, abonos: [{ monto: 1000 }] };
+        const txs = [
+            { type: 'transfer', amount: 500, card: 'Otra', destinationCard: CUENTA },
+            { type: 'transfer', amount: 200, card: CUENTA, destinationCard: 'Otra' },
+        ];
+        expect(calcGoalSavings(goal, txs)).toBe(1300);
+    });
+
+    it('supports legacy isTransfer flag and account field', () => {
+        const goal = { cuenta: CUENTA };
+        const txs = [{ isTransfer: true, type: 'debit', amount: 400, account: CUENTA }];
+        expect(calcGoalSavings(goal, txs)).toBe(-400);
+    });
+
+    it('ignores malformed abono amounts', () => {
+        const goal = { abonos: [{ monto: 'abc' }, { monto: 500 }] };
+        expect(calcGoalSavings(goal, [])).toBe(500);
     });
 });

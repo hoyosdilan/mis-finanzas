@@ -75,3 +75,29 @@ export const calculateBalances = (transactions) => {
 
     return { netWorth, personalBalance, businessCashFlow };
 };
+
+/**
+ * Calculates the saved amount for a savings goal.
+ *
+ * Savings = manual contributions (goal.abonos) + net transfer flow of the
+ * linked account: transfers INTO goal.cuenta add, transfers OUT subtract.
+ * Credits (e.g. salary deposits) are intentionally ignored — funding a goal
+ * happens by moving money to its account or by recording an abono.
+ *
+ * @param {{cuenta?: string, abonos?: Array<{monto: number}>}} goal
+ * @param {Array<object>} transactions
+ * @returns {number} Amount saved (can be negative if more left than entered).
+ */
+export const calcGoalSavings = (goal, transactions) => {
+    const abonos = (goal.abonos || []).reduce((sum, a) => sum + (Number(a.monto) || 0), 0);
+    if (!goal.cuenta) return abonos;
+
+    let neto = 0;
+    transactions.forEach((t) => {
+        if (t.type !== 'transfer' && t.isTransfer !== true) return;
+        const amount = Number(t.amount) || 0;
+        if (t.destinationCard === goal.cuenta) neto += amount;
+        if ((t.card || t.account) === goal.cuenta) neto -= amount;
+    });
+    return abonos + neto;
+};

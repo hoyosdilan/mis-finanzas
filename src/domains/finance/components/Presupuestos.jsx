@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import PresupuestoModal from './PresupuestoModal';
 import MetaModal from './MetaModal';
 import { useFinance } from '../context/FinanceContext';
-import { format, subMonths, addMonths } from 'date-fns';
+import { format, subMonths, addMonths, differenceInCalendarMonths } from 'date-fns';
+import { calcGoalSavings } from '../utils/financeHelpers';
 import { es } from 'date-fns/locale';
 import { formatCurrency } from '../../../shared/utils/format';
 import {
@@ -72,19 +73,21 @@ export default function Presupuestos({ onNavigate }) {
 
   const presupuestadoTotal = useMemo(() => enrichedCategories.reduce((a, c) => a + Number(c.limite), 0), [enrichedCategories]);
 
-  const goalSavings = useMemo(() => {
-    const s = {};
-    goals.forEach(g => {
-      if (g.cuenta) s[g.id] = transactions.filter(t => t.type === 'credit' && t.account === g.cuenta).reduce((a, t) => a + Number(t.amount), 0);
-    });
-    return s;
-  }, [transactions, goals]);
-
   const localGoals = useMemo(() =>
     goals
       .filter(g => currentContext === 'unified' ? true : g.contexto === currentContext)
-      .map(g => ({ ...g, ahorrado: goalSavings[g.id] || 0 })),
-    [goals, currentContext, goalSavings]);
+      .map(g => {
+        const ahorrado = calcGoalSavings(g, transactions);
+        return {
+          ...g,
+          ahorrado,
+          completada: g.estado === 'completada' || (Number(g.objetivo) > 0 && ahorrado >= Number(g.objetivo)),
+        };
+      }),
+    [goals, currentContext, transactions]);
+
+  const metasActivas     = useMemo(() => localGoals.filter(g => !g.completada), [localGoals]);
+  const metasCompletadas = useMemo(() => localGoals.filter(g => g.completada), [localGoals]);
 
   const catIconMap = useMemo(() => {
     const m = {};
@@ -343,7 +346,8 @@ export default function Presupuestos({ onNavigate }) {
           <Card padding={16}>
             <div style={{ marginBottom: 12 }}>
               <SectionHeader
-                title="Metas de ahorro" eyebrow={`${localGoals.length} ${localGoals.length === 1 ? 'meta' : 'metas'}`}
+                title="Metas de ahorro"
+                eyebrow={`${metasActivas.length} ${metasActivas.length === 1 ? 'activa' : 'activas'}${metasCompletadas.length > 0 ? ` · ${metasCompletadas.length} ${metasCompletadas.length === 1 ? 'completada' : 'completadas'}` : ''}`}
                 action="Nueva"
                 onAction={() => { setEditingMeta(null); setIsMetaModalOpen(true); }}
               />
@@ -356,7 +360,7 @@ export default function Presupuestos({ onNavigate }) {
               </div>
             ) : (
               <div>
-                {localGoals.map((meta, i) => {
+                {metasActivas.map((meta, i) => {
                   const progreso = pct(meta.ahorrado, meta.objetivo);
                   return (
                     <div
@@ -364,7 +368,7 @@ export default function Presupuestos({ onNavigate }) {
                       onClick={() => { setEditingMeta(meta); setIsMetaModalOpen(true); }}
                       style={{
                         padding: '12px 0', cursor: 'pointer',
-                        borderBottom: i < localGoals.length - 1 ? '1px solid var(--border-default)' : 'none',
+                        borderBottom: i < metasActivas.length - 1 ? '1px solid var(--border-default)' : 'none',
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -378,10 +382,46 @@ export default function Presupuestos({ onNavigate }) {
                           {progreso.toFixed(0)}%
                         </span>
                       </div>
-                      <ProgressBar value={meta.ahorrado} max={meta.objetivo || 1} color="var(--olive-500)" />
+                      <ProgressBar value={Math.max(0, meta.ahorrado)} max={meta.objetivo || 1} color="var(--olive-500)" />
+                      {meta.fechaObjetivo && (() => {
+                        const target = new Date(meta.fechaObjetivo + 'T12:00:00');
+                        const meses = differenceInCalendarMonths(target, new Date()) + 1; // incluye el mes en curso
+                        const falta = Math.max(0, Number(meta.objetivo) - meta.ahorrado);
+                        return (
+                          <div style={{ marginTop: 6, fontSize: 11, color: meses > 0 ? 'var(--fg-3)' : 'var(--warning-700)' }}>
+                            {meses > 0
+                              ? <>Ritmo: <strong style={{ color: 'var(--fg-1)' }}>{formatCurrency(Math.ceil(falta / meses), 'COP')}/mes</strong> para llegar en {format(target, 'MMM yyyy', { locale: es })}</>
+                              : <>Fecha objetivo vencida ({format(target, 'MMM yyyy', { locale: es })})</>}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
+
+                {metasCompletadas.length > 0 && (
+                  <div style={{ marginTop: metasActivas.length > 0 ? 14 : 0 }}>
+                    <Eyebrow style={{ marginBottom: 4 }}>Completadas</Eyebrow>
+                    {metasCompletadas.map(meta => (
+                      <div
+                        key={meta.id}
+                        onClick={() => { setEditingMeta(meta); setIsMetaModalOpen(true); }}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          gap: 8, padding: '9px 0', cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                          <span aria-hidden>🎉</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {meta.nombre}
+                          </span>
+                        </div>
+                        <Pill variant="success" icon="check_circle">{formatCurrency(meta.objetivo, 'COP')}</Pill>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </Card>
