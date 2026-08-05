@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import PresupuestoModal from './PresupuestoModal';
 import MetaModal from './MetaModal';
 import { useFinance } from '../context/FinanceContext';
@@ -26,7 +26,7 @@ const DATE_INPUT_STYLE = {
 };
 
 export default function Presupuestos({ onNavigate }) {
-  const { budgets, fetchBudgetConfig, saveBudgetConfig, goals, transactions, appConfig, currentContext } = useFinance();
+  const { budgets, fetchBudgetConfig, saveBudgetConfig, goals, transactions, appConfig, updateAppConfig, currentContext } = useFinance();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isPresupuestoModalOpen, setIsPresupuestoModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -107,6 +107,26 @@ export default function Presupuestos({ onNavigate }) {
     hasta: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
   }));
 
+  // Seed from the saved range once appConfig loads; after the user touches the
+  // range locally, the saved value must never overwrite it again
+  const rangoSeeded = useRef(false);
+  useEffect(() => {
+    if (rangoSeeded.current) return;
+    const saved = appConfig?.flujoPeriodo;
+    if (saved?.desde && saved?.hasta) {
+      setRango({ desde: saved.desde, hasta: saved.hasta });
+      rangoSeeded.current = true;
+    }
+  }, [appConfig]);
+
+  const persistRango = (next) => {
+    rangoSeeded.current = true;
+    setRango(next);
+    if (next.desde && next.hasta) {
+      updateAppConfig({ ...appConfig, flujoPeriodo: next }).catch(() => {});
+    }
+  };
+
   const flujo = useMemo(
     () => sumPeriodFlows(transactions, rango.desde, rango.hasta, currentContext),
     [transactions, rango, currentContext]);
@@ -122,7 +142,7 @@ export default function Presupuestos({ onNavigate }) {
     const desde = addMonths(new Date(rango.desde + 'T12:00:00'), dir);
     let hasta = addMonths(new Date(rango.hasta + 'T12:00:00'), dir);
     if (isLastDayOfMonth(new Date(rango.hasta + 'T12:00:00'))) hasta = endOfMonth(hasta);
-    setRango({ desde: format(desde, 'yyyy-MM-dd'), hasta: format(hasta, 'yyyy-MM-dd') });
+    persistRango({ desde: format(desde, 'yyyy-MM-dd'), hasta: format(hasta, 'yyyy-MM-dd') });
   };
 
   const catIconMap = useMemo(() => {
@@ -509,19 +529,19 @@ export default function Presupuestos({ onNavigate }) {
           <IconBtn icon="chevron_left" tone="sunken" size={32} title="Periodo anterior" onClick={() => shiftRango(-1)} />
           <input
             type="date" value={rango.desde} max={rango.hasta || undefined}
-            onChange={e => setRango(r => ({ ...r, desde: e.target.value }))}
+            onChange={e => persistRango({ ...rango, desde: e.target.value })}
             style={DATE_INPUT_STYLE} aria-label="Desde"
           />
           <Icon name="arrow_forward" size={14} color="var(--fg-4)" />
           <input
             type="date" value={rango.hasta} min={rango.desde || undefined}
-            onChange={e => setRango(r => ({ ...r, hasta: e.target.value }))}
+            onChange={e => persistRango({ ...rango, hasta: e.target.value })}
             style={DATE_INPUT_STYLE} aria-label="Hasta"
           />
           <IconBtn icon="chevron_right" tone="sunken" size={32} title="Periodo siguiente" onClick={() => shiftRango(1)} />
           <button
             type="button"
-            onClick={() => setRango({ desde: format(startOfMonth(new Date()), 'yyyy-MM-dd'), hasta: format(endOfMonth(new Date()), 'yyyy-MM-dd') })}
+            onClick={() => persistRango({ desde: format(startOfMonth(new Date()), 'yyyy-MM-dd'), hasta: format(endOfMonth(new Date()), 'yyyy-MM-dd') })}
             style={{
               border: '1px solid var(--border-default)', background: 'var(--bg-sunken)', cursor: 'pointer',
               borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 700, color: 'var(--fg-2)',
