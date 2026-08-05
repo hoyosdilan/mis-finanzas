@@ -6,7 +6,7 @@ import {
   format, subMonths, addMonths, differenceInCalendarMonths,
   startOfMonth, endOfMonth, isLastDayOfMonth, differenceInCalendarDays,
 } from 'date-fns';
-import { calcGoalSavings, sumPeriodFlows } from '../utils/financeHelpers';
+import { calcGoalSavings, sumPeriodFlows, shortAccount } from '../utils/financeHelpers';
 import { es } from 'date-fns/locale';
 import { formatCurrency } from '../../../shared/utils/format';
 import {
@@ -560,13 +560,13 @@ export default function Presupuestos({ onNavigate }) {
           </button>
         </div>
 
-        {flujo.count === 0 ? (
+        {flujo.count === 0 && flujo.transfers.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '22px 0', fontSize: 13, color: 'var(--fg-3)' }}>
             Sin movimientos en este periodo.
           </div>
         ) : (
           <div style={{ marginTop: 14 }}>
-            {Object.entries(flujo.porMoneda).map(([moneda, m]) => (
+            {Object.entries(flujo.porMoneda).filter(([, m]) => m.ingresos > 0 || m.egresos > 0).map(([moneda, m]) => (
               <div key={moneda} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-default)' }}>
                 <div>
                   <Eyebrow>Ingresos{Object.keys(flujo.porMoneda).length > 1 ? ` · ${moneda}` : ''}</Eyebrow>
@@ -588,8 +588,34 @@ export default function Presupuestos({ onNavigate }) {
                 </div>
               </div>
             ))}
+            {flujo.transfers.length > 0 && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border-default)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <Eyebrow>Transferencias y pagos de tarjeta</Eyebrow>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--plum-400)' }}>
+                    {Object.entries(flujo.porMoneda)
+                      .filter(([, m]) => m.transferencias > 0)
+                      .map(([moneda, m]) => formatCurrency(m.transferencias, moneda))
+                      .join(' · ')}
+                  </span>
+                </div>
+                {flujo.transfers.map((t, i) => (
+                  <div key={t.id || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '5px 0' }}>
+                    <div style={{ minWidth: 0, fontSize: 12, color: 'var(--fg-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: 'var(--fg-4)', fontFamily: 'var(--font-mono)' }}>
+                        {format(t.date instanceof Date ? t.date : new Date(t.date + 'T12:00:00'), 'dd MMM', { locale: es })}
+                      </span>
+                      {' '}{shortAccount(t.card)} <span style={{ color: 'var(--plum-400)' }}>→</span> {shortAccount(t.destinationCard || '?')}
+                    </div>
+                    <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--fg-2)' }}>
+                      {formatCurrency(Number(t.amount) || 0, t.currency || 'COP')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ marginTop: 4, fontSize: 11, color: 'var(--fg-4)' }}>
-              {flujo.count} {flujo.count === 1 ? 'movimiento' : 'movimientos'} · {rangoDias} días · transferencias no incluidas
+              {flujo.count} {flujo.count === 1 ? 'movimiento' : 'movimientos'} · {rangoDias} días · las transferencias no cuentan en el neto
             </div>
           </div>
         )}

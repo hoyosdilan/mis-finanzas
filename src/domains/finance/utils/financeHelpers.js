@@ -89,31 +89,53 @@ export const calculateBalances = (transactions) => {
  * @returns {number} Amount saved (can be negative if more left than entered).
  */
 /**
+ * Shortens an account label for compact display by dropping the issuer prefix
+ * (e.g. "Bancolombia Tarjeta Oro" → "Tarjeta Oro").
+ *
+ * @param {string|null|undefined} label
+ * @returns {string}
+ */
+export const shortAccount = (label) => {
+    if (!label) return 'Efectivo';
+    const parts = label.trim().split(/\s+/);
+    return parts.length > 2 ? parts.slice(-2).join(' ') : label;
+};
+
+/**
  * Sums income/expense flows within an inclusive date range.
- * Transfers are excluded — they move money between accounts, not in/out.
+ * Transfers (e.g. credit-card payments) don't count as income/expense — they
+ * move money between accounts — but they are collected separately so the UI
+ * can show them.
  *
  * @param {Array<object>} transactions
  * @param {string} desde - Range start, 'YYYY-MM-DD' (inclusive).
  * @param {string} hasta - Range end, 'YYYY-MM-DD' (inclusive).
  * @param {string} [context='unified'] - 'personal' | 'business' | 'unified' (all).
- * @returns {{porMoneda: Object<string, {ingresos: number, egresos: number, neto: number}>, count: number}}
+ * @returns {{porMoneda: Object<string, {ingresos: number, egresos: number, neto: number, transferencias: number}>, transfers: Array<object>, count: number}}
  */
 export const sumPeriodFlows = (transactions, desde, hasta, context = 'unified') => {
     const porMoneda = {};
+    const transfers = [];
     let count = 0;
 
     transactions.forEach((t) => {
-        if (t.type === 'transfer' || t.isTransfer === true) return;
-        if (context !== 'unified' && t.context !== context) return;
+        const esTransfer = t.type === 'transfer' || t.isTransfer === true;
+        // A transfer belongs to the period view if either end touches the context
+        if (context !== 'unified' && t.context !== context && !(esTransfer && t.destinationContext === context)) return;
 
         const d = parseTransactionDate(t.date);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         if ((desde && key < desde) || (hasta && key > hasta)) return;
 
         const currency = t.currency || 'COP';
-        if (!porMoneda[currency]) porMoneda[currency] = { ingresos: 0, egresos: 0, neto: 0 };
+        if (!porMoneda[currency]) porMoneda[currency] = { ingresos: 0, egresos: 0, neto: 0, transferencias: 0 };
 
         const amount = Number(t.amount) || 0;
+        if (esTransfer) {
+            porMoneda[currency].transferencias += amount;
+            transfers.push(t);
+            return;
+        }
         if (t.type === 'credit') {
             porMoneda[currency].ingresos += amount;
             porMoneda[currency].neto += amount;
@@ -124,7 +146,7 @@ export const sumPeriodFlows = (transactions, desde, hasta, context = 'unified') 
         count += 1;
     });
 
-    return { porMoneda, count };
+    return { porMoneda, transfers, count };
 };
 
 export const calcGoalSavings = (goal, transactions) => {

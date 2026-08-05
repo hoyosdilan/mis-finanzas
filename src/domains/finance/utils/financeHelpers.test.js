@@ -299,29 +299,37 @@ describe('sumPeriodFlows', () => {
 
     it('sums credits and debits inside the inclusive range', () => {
         const { porMoneda, count } = sumPeriodFlows(txs, '2026-07-20', '2026-08-19');
-        expect(porMoneda.COP).toEqual({ ingresos: 3000000, egresos: 800000, neto: 2200000 });
+        expect(porMoneda.COP).toEqual({ ingresos: 3000000, egresos: 800000, neto: 2200000, transferencias: 999999 });
         expect(count).toBe(5);
     });
 
     it('includes movements exactly on the boundary dates', () => {
         const { porMoneda } = sumPeriodFlows(txs, '2026-07-20', '2026-07-20');
-        expect(porMoneda.COP).toEqual({ ingresos: 3000000, egresos: 0, neto: 3000000 });
+        expect(porMoneda.COP).toEqual({ ingresos: 3000000, egresos: 0, neto: 3000000, transferencias: 0 });
     });
 
-    it('excludes transfers from the totals and the count', () => {
-        const { porMoneda, count } = sumPeriodFlows(txs, '2026-08-01', '2026-08-01');
-        expect(porMoneda).toEqual({});
+    it('keeps transfers out of ingresos/egresos/neto and the count, but collects them', () => {
+        const { porMoneda, transfers, count } = sumPeriodFlows(txs, '2026-08-01', '2026-08-01');
+        expect(porMoneda.COP).toEqual({ ingresos: 0, egresos: 0, neto: 0, transferencias: 999999 });
+        expect(transfers).toHaveLength(1);
+        expect(transfers[0].amount).toBe(999999);
         expect(count).toBe(0);
     });
 
     it('filters by context when not unified', () => {
         const { porMoneda } = sumPeriodFlows(txs, '2026-08-01', '2026-08-31', 'business');
-        expect(porMoneda.COP).toEqual({ ingresos: 0, egresos: 100000, neto: -100000 });
+        expect(porMoneda.COP).toEqual({ ingresos: 0, egresos: 100000, neto: -100000, transferencias: 0 });
+    });
+
+    it('includes transfers whose destination context matches the filter', () => {
+        const cross = [{ type: 'transfer', amount: 700, date: '2026-08-02', context: 'personal', destinationContext: 'business', currency: 'COP' }];
+        const { transfers } = sumPeriodFlows(cross, '2026-08-01', '2026-08-31', 'business');
+        expect(transfers).toHaveLength(1);
     });
 
     it('groups totals per currency', () => {
         const { porMoneda } = sumPeriodFlows(txs, '2026-08-01', '2026-08-31');
-        expect(porMoneda.USD).toEqual({ ingresos: 0, egresos: 50, neto: -50 });
+        expect(porMoneda.USD).toEqual({ ingresos: 0, egresos: 50, neto: -50, transferencias: 0 });
         expect(porMoneda.COP.egresos).toBe(300000);
     });
 

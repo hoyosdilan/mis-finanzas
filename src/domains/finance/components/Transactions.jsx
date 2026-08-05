@@ -8,6 +8,7 @@ import {
   Icon, Card, Pill, IconTile, Eyebrow, hueForCategory, hueColorVar
 } from '../../../shared/ds/Primitives';
 import ContextSwitcher from './ContextSwitcher';
+import { shortAccount } from '../utils/financeHelpers';
 
 const LazyBalanceChart = React.lazy(() => import('./BalanceChart'));
 
@@ -18,13 +19,6 @@ const FilterField = ({ label, children }) => (
     {children}
   </div>
 );
-
-// "Bancolombia Master *7761" → "Master *7761" (drop the issuer prefix on mobile)
-const shortAccount = (label) => {
-  if (!label) return 'Efectivo';
-  const parts = label.trim().split(/\s+/);
-  return parts.length > 2 ? parts.slice(-2).join(' ') : label;
-};
 
 const filterInputStyle = {
   background: 'var(--bg-default)',
