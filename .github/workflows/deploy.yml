@@ -46,3 +46,5 @@ jobs:
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MIS_FINANZAS }}'
           projectId: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
           channelId: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'live' }}
+          # Pinned: firebase-tools@latest can resolve to a version whose npm tarball 404s
+          firebaseToolsVersion: '15.25.1'
