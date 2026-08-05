@@ -16,6 +16,8 @@ import ContextSwitcher from './ContextSwitcher';
 
 const HUE_CYCLE = ['clay', 'olive', 'amber', 'plum', 'ink'];
 
+const FLUJO_LS_KEY = 'misfinanzas.flujoPeriodo';
+
 const DATE_INPUT_STYLE = {
   padding: '7px 10px',
   background: 'var(--bg-sunken)',
@@ -26,7 +28,7 @@ const DATE_INPUT_STYLE = {
 };
 
 export default function Presupuestos({ onNavigate }) {
-  const { budgets, fetchBudgetConfig, saveBudgetConfig, goals, transactions, appConfig, updateAppConfig, currentContext } = useFinance();
+  const { budgets, fetchBudgetConfig, saveBudgetConfig, goals, transactions, appConfig, patchAppConfig, currentContext } = useFinance();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isPresupuestoModalOpen, setIsPresupuestoModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -101,11 +103,18 @@ export default function Presupuestos({ onNavigate }) {
   const metasActivas     = useMemo(() => localGoals.filter(g => !g.completada), [localGoals]);
   const metasCompletadas = useMemo(() => localGoals.filter(g => g.completada), [localGoals]);
 
-  // Flujo por periodo — free date range, defaults to the current calendar month
-  const [rango, setRango] = useState(() => ({
-    desde: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
-    hasta: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
-  }));
+  // Flujo por periodo — free date range; last used range wins:
+  // localStorage restores instantly on this device, Firestore syncs across devices
+  const [rango, setRango] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FLUJO_LS_KEY));
+      if (saved?.desde && saved?.hasta) return saved;
+    } catch { /* localStorage vacío o corrupto: usar el mes actual */ }
+    return {
+      desde: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+      hasta: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
+    };
+  });
 
   // Seed from the saved range once appConfig loads; after the user touches the
   // range locally, the saved value must never overwrite it again
@@ -122,9 +131,9 @@ export default function Presupuestos({ onNavigate }) {
   const persistRango = (next) => {
     rangoSeeded.current = true;
     setRango(next);
-    if (next.desde && next.hasta) {
-      updateAppConfig({ ...appConfig, flujoPeriodo: next }).catch(() => {});
-    }
+    if (!next.desde || !next.hasta) return;
+    try { localStorage.setItem(FLUJO_LS_KEY, JSON.stringify(next)); } catch { /* sin cuota o modo privado */ }
+    patchAppConfig({ flujoPeriodo: next }).catch(() => {});
   };
 
   const flujo = useMemo(

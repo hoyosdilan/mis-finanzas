@@ -166,6 +166,19 @@ export const FinanceProvider = ({ children }) => {
         }
     }, []);
 
+    // Escribe solo los campos indicados (merge) — para preferencias puntuales de UI
+    // sin riesgo de pisar el resto de la config con un estado en memoria desactualizado.
+    const patchAppConfig = useCallback(async (patch) => {
+        try {
+            const configRef = doc(db, 'finance_settings', 'default');
+            await setDoc(configRef, patch, { merge: true });
+            setAppConfig(prev => ({ ...prev, ...patch }));
+        } catch (error) {
+            console.error("Error patching config: ", error);
+            throw error;
+        }
+    }, []);
+
     const addTransaction = useCallback(async (data) => {
         try {
             const today = new Date();
@@ -357,6 +370,7 @@ export const FinanceProvider = ({ children }) => {
         getTotals,
         appConfig,
         updateAppConfig,
+        patchAppConfig,
         addGoal,
         updateGoal,
         deleteGoal,
@@ -365,7 +379,7 @@ export const FinanceProvider = ({ children }) => {
     }), [
         transactions, budgets, goals, loading, currentContext, getTotals, appConfig,
         addTransaction, addTransfer, deleteTransaction, updateTransaction,
-        updateAppConfig, addGoal, updateGoal, deleteGoal, fetchBudgetConfig, saveBudgetConfig,
+        updateAppConfig, patchAppConfig, addGoal, updateGoal, deleteGoal, fetchBudgetConfig, saveBudgetConfig,
     ]);
 
     return (
