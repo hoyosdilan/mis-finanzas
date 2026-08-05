@@ -2,8 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import PresupuestoModal from './PresupuestoModal';
 import MetaModal from './MetaModal';
 import { useFinance } from '../context/FinanceContext';
-import { format, subMonths, addMonths, differenceInCalendarMonths } from 'date-fns';
-import { calcGoalSavings } from '../utils/financeHelpers';
+import {
+  format, subMonths, addMonths, differenceInCalendarMonths,
+  startOfMonth, endOfMonth, isLastDayOfMonth, differenceInCalendarDays,
+} from 'date-fns';
+import { calcGoalSavings, sumPeriodFlows } from '../utils/financeHelpers';
 import { es } from 'date-fns/locale';
 import { formatCurrency } from '../../../shared/utils/format';
 import {
@@ -12,6 +15,15 @@ import {
 import ContextSwitcher from './ContextSwitcher';
 
 const HUE_CYCLE = ['clay', 'olive', 'amber', 'plum', 'ink'];
+
+const DATE_INPUT_STYLE = {
+  padding: '7px 10px',
+  background: 'var(--bg-sunken)',
+  border: '1px solid var(--border-default)',
+  borderRadius: 'var(--r-lg)',
+  fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: 600,
+  color: 'var(--fg-1)', outline: 'none', boxSizing: 'border-box',
+};
 
 export default function Presupuestos({ onNavigate }) {
   const { budgets, fetchBudgetConfig, saveBudgetConfig, goals, transactions, appConfig, currentContext } = useFinance();
@@ -88,6 +100,30 @@ export default function Presupuestos({ onNavigate }) {
 
   const metasActivas     = useMemo(() => localGoals.filter(g => !g.completada), [localGoals]);
   const metasCompletadas = useMemo(() => localGoals.filter(g => g.completada), [localGoals]);
+
+  // Flujo por periodo — free date range, defaults to the current calendar month
+  const [rango, setRango] = useState(() => ({
+    desde: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    hasta: format(endOfMonth(new Date()), 'yyyy-MM-dd'),
+  }));
+
+  const flujo = useMemo(
+    () => sumPeriodFlows(transactions, rango.desde, rango.hasta, currentContext),
+    [transactions, rango, currentContext]);
+
+  const rangoDias = useMemo(() => {
+    if (!rango.desde || !rango.hasta) return 0;
+    return differenceInCalendarDays(new Date(rango.hasta + 'T12:00:00'), new Date(rango.desde + 'T12:00:00')) + 1;
+  }, [rango]);
+
+  // Shift both ends by one calendar month so a custom cut (e.g. 20th → 19th) is preserved
+  const shiftRango = (dir) => {
+    if (!rango.desde || !rango.hasta) return;
+    const desde = addMonths(new Date(rango.desde + 'T12:00:00'), dir);
+    let hasta = addMonths(new Date(rango.hasta + 'T12:00:00'), dir);
+    if (isLastDayOfMonth(new Date(rango.hasta + 'T12:00:00'))) hasta = endOfMonth(hasta);
+    setRango({ desde: format(desde, 'yyyy-MM-dd'), hasta: format(hasta, 'yyyy-MM-dd') });
+  };
 
   const catIconMap = useMemo(() => {
     const m = {};
@@ -462,6 +498,73 @@ export default function Presupuestos({ onNavigate }) {
       </div>
 
       {currentContext === 'unified' ? renderResumenGeneral() : renderContextoEspecifico()}
+
+      {/* Flujo por periodo — suma libre entre dos fechas */}
+      <Card padding={16} style={{ marginTop: 14 }}>
+        <div style={{ marginBottom: 12 }}>
+          <SectionHeader title="Flujo por periodo" eyebrow="Ingresos y egresos entre dos fechas" />
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <IconBtn icon="chevron_left" tone="sunken" size={32} title="Periodo anterior" onClick={() => shiftRango(-1)} />
+          <input
+            type="date" value={rango.desde} max={rango.hasta || undefined}
+            onChange={e => setRango(r => ({ ...r, desde: e.target.value }))}
+            style={DATE_INPUT_STYLE} aria-label="Desde"
+          />
+          <Icon name="arrow_forward" size={14} color="var(--fg-4)" />
+          <input
+            type="date" value={rango.hasta} min={rango.desde || undefined}
+            onChange={e => setRango(r => ({ ...r, hasta: e.target.value }))}
+            style={DATE_INPUT_STYLE} aria-label="Hasta"
+          />
+          <IconBtn icon="chevron_right" tone="sunken" size={32} title="Periodo siguiente" onClick={() => shiftRango(1)} />
+          <button
+            type="button"
+            onClick={() => setRango({ desde: format(startOfMonth(new Date()), 'yyyy-MM-dd'), hasta: format(endOfMonth(new Date()), 'yyyy-MM-dd') })}
+            style={{
+              border: '1px solid var(--border-default)', background: 'var(--bg-sunken)', cursor: 'pointer',
+              borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 700, color: 'var(--fg-2)',
+            }}
+          >
+            Este mes
+          </button>
+        </div>
+
+        {flujo.count === 0 ? (
+          <div style={{ textAlign: 'center', padding: '22px 0', fontSize: 13, color: 'var(--fg-3)' }}>
+            Sin movimientos en este periodo.
+          </div>
+        ) : (
+          <div style={{ marginTop: 14 }}>
+            {Object.entries(flujo.porMoneda).map(([moneda, m]) => (
+              <div key={moneda} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-default)' }}>
+                <div>
+                  <Eyebrow>Ingresos{Object.keys(flujo.porMoneda).length > 1 ? ` · ${moneda}` : ''}</Eyebrow>
+                  <div style={{ marginTop: 4, fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--success-700)' }}>
+                    +{formatCurrency(m.ingresos, moneda)}
+                  </div>
+                </div>
+                <div>
+                  <Eyebrow>Egresos</Eyebrow>
+                  <div style={{ marginTop: 4, fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--danger-700)' }}>
+                    −{formatCurrency(m.egresos, moneda)}
+                  </div>
+                </div>
+                <div>
+                  <Eyebrow>Neto</Eyebrow>
+                  <div style={{ marginTop: 4, fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-mono)', color: m.neto < 0 ? 'var(--danger-700)' : 'var(--fg-1)' }}>
+                    {formatCurrency(m.neto, moneda)}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 4, fontSize: 11, color: 'var(--fg-4)' }}>
+              {flujo.count} {flujo.count === 1 ? 'movimiento' : 'movimientos'} · {rangoDias} días · transferencias no incluidas
+            </div>
+          </div>
+        )}
+      </Card>
 
       <PresupuestoModal
         isOpen={isPresupuestoModalOpen}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { normalizeCategory, parseTransactionDate, calculateBalances, calcGoalSavings } from './financeHelpers';
+import { normalizeCategory, parseTransactionDate, calculateBalances, calcGoalSavings, sumPeriodFlows } from './financeHelpers';
 
 // ─────────────────────────────────────────────────
 // normalizeCategory
@@ -284,5 +284,56 @@ describe('calcGoalSavings', () => {
     it('ignores malformed abono amounts', () => {
         const goal = { abonos: [{ monto: 'abc' }, { monto: 500 }] };
         expect(calcGoalSavings(goal, [])).toBe(500);
+    });
+});
+
+describe('sumPeriodFlows', () => {
+    const txs = [
+        { type: 'credit', amount: 3000000, date: '2026-07-20', context: 'personal', currency: 'COP' },
+        { type: 'debit', amount: 500000, date: '2026-07-25', context: 'personal', currency: 'COP' },
+        { type: 'debit', amount: 200000, date: '2026-08-10', context: 'personal', currency: 'COP' },
+        { type: 'debit', amount: 100000, date: '2026-08-19', context: 'business', currency: 'COP' },
+        { type: 'transfer', amount: 999999, date: '2026-08-01', context: 'personal', currency: 'COP' },
+        { type: 'debit', amount: 50, date: '2026-08-05', context: 'personal', currency: 'USD' },
+    ];
+
+    it('sums credits and debits inside the inclusive range', () => {
+        const { porMoneda, count } = sumPeriodFlows(txs, '2026-07-20', '2026-08-19');
+        expect(porMoneda.COP).toEqual({ ingresos: 3000000, egresos: 800000, neto: 2200000 });
+        expect(count).toBe(5);
+    });
+
+    it('includes movements exactly on the boundary dates', () => {
+        const { porMoneda } = sumPeriodFlows(txs, '2026-07-20', '2026-07-20');
+        expect(porMoneda.COP).toEqual({ ingresos: 3000000, egresos: 0, neto: 3000000 });
+    });
+
+    it('excludes transfers from the totals and the count', () => {
+        const { porMoneda, count } = sumPeriodFlows(txs, '2026-08-01', '2026-08-01');
+        expect(porMoneda).toEqual({});
+        expect(count).toBe(0);
+    });
+
+    it('filters by context when not unified', () => {
+        const { porMoneda } = sumPeriodFlows(txs, '2026-08-01', '2026-08-31', 'business');
+        expect(porMoneda.COP).toEqual({ ingresos: 0, egresos: 100000, neto: -100000 });
+    });
+
+    it('groups totals per currency', () => {
+        const { porMoneda } = sumPeriodFlows(txs, '2026-08-01', '2026-08-31');
+        expect(porMoneda.USD).toEqual({ ingresos: 0, egresos: 50, neto: -50 });
+        expect(porMoneda.COP.egresos).toBe(300000);
+    });
+
+    it('returns empty totals when nothing matches', () => {
+        const { porMoneda, count } = sumPeriodFlows(txs, '2030-01-01', '2030-12-31');
+        expect(porMoneda).toEqual({});
+        expect(count).toBe(0);
+    });
+
+    it('supports legacy isTransfer flag exclusion', () => {
+        const legacy = [{ isTransfer: true, type: 'debit', amount: 100, date: '2026-08-05' }];
+        const { count } = sumPeriodFlows(legacy, '2026-08-01', '2026-08-31');
+        expect(count).toBe(0);
     });
 });

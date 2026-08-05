@@ -88,6 +88,45 @@ export const calculateBalances = (transactions) => {
  * @param {Array<object>} transactions
  * @returns {number} Amount saved (can be negative if more left than entered).
  */
+/**
+ * Sums income/expense flows within an inclusive date range.
+ * Transfers are excluded — they move money between accounts, not in/out.
+ *
+ * @param {Array<object>} transactions
+ * @param {string} desde - Range start, 'YYYY-MM-DD' (inclusive).
+ * @param {string} hasta - Range end, 'YYYY-MM-DD' (inclusive).
+ * @param {string} [context='unified'] - 'personal' | 'business' | 'unified' (all).
+ * @returns {{porMoneda: Object<string, {ingresos: number, egresos: number, neto: number}>, count: number}}
+ */
+export const sumPeriodFlows = (transactions, desde, hasta, context = 'unified') => {
+    const porMoneda = {};
+    let count = 0;
+
+    transactions.forEach((t) => {
+        if (t.type === 'transfer' || t.isTransfer === true) return;
+        if (context !== 'unified' && t.context !== context) return;
+
+        const d = parseTransactionDate(t.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if ((desde && key < desde) || (hasta && key > hasta)) return;
+
+        const currency = t.currency || 'COP';
+        if (!porMoneda[currency]) porMoneda[currency] = { ingresos: 0, egresos: 0, neto: 0 };
+
+        const amount = Number(t.amount) || 0;
+        if (t.type === 'credit') {
+            porMoneda[currency].ingresos += amount;
+            porMoneda[currency].neto += amount;
+        } else {
+            porMoneda[currency].egresos += amount;
+            porMoneda[currency].neto -= amount;
+        }
+        count += 1;
+    });
+
+    return { porMoneda, count };
+};
+
 export const calcGoalSavings = (goal, transactions) => {
     const abonos = (goal.abonos || []).reduce((sum, a) => sum + (Number(a.monto) || 0), 0);
     if (!goal.cuenta) return abonos;
